@@ -1,0 +1,50 @@
+[
+  {
+    "id": "secchi_disk",
+    "name": "Secchi disk",
+    "cost": 40,
+    "reveals": ["secchi"],
+    "scope": "tile",
+    "mark": { "kind": "secchi", "label": "Secchi" }
+  },
+  {
+    "id": "water_grab",
+    "name": "Water grab sample",
+    "cost": 250,
+    "reveals": ["suspended_sediment", "chla", "total_p", "nitrate"],
+    "scope": "tile",
+    "mark": { "kind": "bottle", "label": "Grab sample" }
+  },
+  {
+    "id": "oxygen_profile",
+    "name": "Oxygen profile",
+    "cost": 400,
+    "reveals": ["bottom_do"],
+    "scope": "tile",
+    "mark": { "kind": "probe", "label": "O₂ probe" }
+  },
+  {
+    "id": "fish_survey",
+    "name": "Fish survey",
+    "cost": 1200,
+    "reveals": ["carp"],
+    "scope": "water_body",
+    "mark": { "kind": "net", "label": "Fish survey" }
+  },
+  {
+    "id": "inflow_fish_trap",
+    "name": "Inflow fish trap",
+    "cost": 300,
+    "reveals": ["carp_immigration"],
+    "scope": "water_body",
+    "mark": { "kind": "trap", "label": "Fish trap" }
+  },
+  {
+    "id": "sediment_core",
+    "name": "Sediment core",
+    "cost": 900,
+    "reveals": ["legacy_p"],
+    "scope": "tile",
+    "mark": { "kind": "core", "label": "Core" }
+  }
+]

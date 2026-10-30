@@ -1,0 +1,6 @@
+[
+  { "id": "air", "name": "Air and canopy", "order": 0 },
+  { "id": "water", "name": "Water column", "order": 1 },
+  { "id": "sediment", "name": "Sediment and soil", "order": 2 },
+  { "id": "bedrock", "name": "Bedrock", "order": 3 }
+]

@@ -1,0 +1,51 @@
+[
+  {
+    "id": "plant_submerged",
+    "name": "Plant submerged vegetation",
+    "description": "Plant pondweed and stonewort plugs on this tile.",
+    "cost": 300,
+    "scope": "tile",
+    "effects": [
+      { "variable": "plant_cover", "op": "add", "value": 10 }
+    ],
+    "duration_days": 14,
+    "repeatable": true
+  },
+  {
+    "id": "carp_removal",
+    "name": "Carp removal",
+    "description": "Seine netting and electrofishing to remove most of the carp.",
+    "cost": 2500,
+    "scope": "water_body",
+    "effects": [
+      { "variable": "carp", "op": "multiply", "value": 0.15 }
+    ],
+    "duration_days": 30,
+    "repeatable": true
+  },
+  {
+    "id": "carp_barrier",
+    "name": "Carp barrier at inflow",
+    "description": "A screen across the inflow channel that blocks adult carp.",
+    "cost": 1200,
+    "scope": "water_body",
+    "effects": [
+      { "variable": "carp_immigration", "op": "multiply", "value": 0.05 }
+    ],
+    "duration_days": 21,
+    "repeatable": false
+  },
+  {
+    "id": "alum_treatment",
+    "name": "Alum treatment",
+    "description": "Aluminium sulfate binds phosphorus in the water and caps the sediment.",
+    "cost": 1500,
+    "scope": "water_body",
+    "effects": [
+      { "variable": "legacy_p", "op": "multiply", "value": 0.3 },
+      { "variable": "total_p", "op": "multiply", "value": 0.5 }
+    ],
+    "duration_days": 7,
+    "repeatable": true
+  }
+]

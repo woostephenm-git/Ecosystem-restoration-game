@@ -1,0 +1,432 @@
+[
+  {
+    "id": "sediment_scatters_light",
+    "from": ["suspended_sediment"],
+    "to": "secchi",
+    "function": "linear",
+    "params": { "k": 0.05 },
+    "label": "Particles scatter light",
+    "strength": "strong",
+    "discovered_by": ["secchi", "suspended_sediment"]
+  },
+  {
+    "id": "algae_shade_water",
+    "from": ["chla"],
+    "to": "secchi",
+    "function": "linear",
+    "params": { "k": 0.015 },
+    "label": "Algae shade the water",
+    "strength": "moderate",
+    "discovered_by": ["secchi", "chla"]
+  },
+  {
+    "id": "light_path",
+    "from": ["water_depth", "secchi"],
+    "to": "light_bed",
+    "function": "product",
+    "params": { "k": 1.7 },
+    "factors": [
+      { "var": "water_depth", "shape": "identity" },
+      { "var": "secchi", "shape": "power", "p": -1 }
+    ],
+    "label": "Clarity and depth set the light path",
+    "strength": "strong",
+    "discovered_by": []
+  },
+  {
+    "id": "plants_need_light",
+    "from": ["plant_cover", "light_bed"],
+    "to": "plant_cover",
+    "function": "product",
+    "params": { "k": 0.05 },
+    "factors": [
+      { "var": "plant_cover", "shape": "identity" },
+      { "var": "plant_cover", "shape": "complement", "cap": 100 },
+      { "var": "light_bed", "shape": "threshold", "at": 8, "width": 2, "direction": "above" }
+    ],
+    "label": "Growth needs light at the bed",
+    "strength": "strong",
+    "discovered_by": []
+  },
+  {
+    "id": "seed_bank_recruitment",
+    "from": ["light_bed"],
+    "to": "plant_cover",
+    "function": "threshold",
+    "params": { "k": 0.0005, "at": 8, "width": 2, "direction": "above" },
+    "label": "Seed bank sprouts in good light",
+    "strength": "weak",
+    "discovered_by": ["light_bed"]
+  },
+  {
+    "id": "plants_spread",
+    "from": ["plant_fragments", "light_bed"],
+    "to": "plant_cover",
+    "function": "product",
+    "params": { "k": 0.002 },
+    "factors": [
+      { "var": "plant_fragments", "shape": "identity" },
+      { "var": "light_bed", "shape": "threshold", "at": 8, "width": 2, "direction": "above" }
+    ],
+    "label": "Fragments from nearby beds take root",
+    "strength": "moderate",
+    "discovered_by": ["plant_cover"]
+  },
+  {
+    "id": "plant_senescence",
+    "from": ["plant_cover"],
+    "to": "plant_cover",
+    "function": "linear",
+    "params": { "k": -0.01 },
+    "label": "Natural die-back",
+    "strength": "weak",
+    "discovered_by": []
+  },
+  {
+    "id": "carp_uproot_plants",
+    "from": ["carp", "plant_cover"],
+    "to": "plant_cover",
+    "function": "product",
+    "params": { "k": -0.0035 },
+    "factors": [
+      { "var": "carp", "shape": "identity" },
+      { "var": "plant_cover", "shape": "saturating", "half": 10 }
+    ],
+    "label": "Uproots plants while feeding",
+    "strength": "strong",
+    "discovered_by": ["carp"]
+  },
+  {
+    "id": "wind_resuspension",
+    "from": ["wind", "plant_cover"],
+    "to": "suspended_sediment",
+    "function": "product",
+    "params": { "k": 1.0 },
+    "factors": [
+      { "var": "wind", "shape": "identity" },
+      { "var": "plant_cover", "shape": "decay", "rate": 0.04 }
+    ],
+    "label": "Waves stir up bare sediment",
+    "strength": "moderate",
+    "discovered_by": ["suspended_sediment"]
+  },
+  {
+    "id": "carp_resuspends_sediment",
+    "from": ["carp", "plant_cover"],
+    "to": "suspended_sediment",
+    "function": "product",
+    "params": { "k": 0.05 },
+    "factors": [
+      { "var": "carp", "shape": "identity" },
+      { "var": "plant_cover", "shape": "decay", "rate": 0.04 }
+    ],
+    "label": "Bioturbation resuspends sediment",
+    "strength": "strong",
+    "discovered_by": ["carp"]
+  },
+  {
+    "id": "plants_stabilise_sediment",
+    "from": ["plant_cover", "suspended_sediment"],
+    "to": "suspended_sediment",
+    "function": "product",
+    "params": { "k": -0.004 },
+    "factors": [
+      { "var": "plant_cover", "shape": "identity" },
+      { "var": "suspended_sediment", "shape": "identity" }
+    ],
+    "label": "Plant beds trap settling particles",
+    "strength": "moderate",
+    "discovered_by": ["suspended_sediment", "plant_cover"]
+  },
+  {
+    "id": "sediment_settling",
+    "from": ["suspended_sediment"],
+    "to": "suspended_sediment",
+    "function": "linear",
+    "params": { "k": -0.5 },
+    "label": "Particles settle out",
+    "strength": "moderate",
+    "discovered_by": []
+  },
+  {
+    "id": "inflow_brings_sediment",
+    "from": ["water_exchange", "incoming_ss"],
+    "to": "suspended_sediment",
+    "function": "product",
+    "params": { "k": 1 },
+    "label": "Arriving water carries sediment in",
+    "strength": "weak",
+    "discovered_by": []
+  },
+  {
+    "id": "outflow_flushes_sediment",
+    "from": ["water_exchange", "suspended_sediment"],
+    "to": "suspended_sediment",
+    "function": "product",
+    "params": { "k": -1 },
+    "label": "Leaving water carries sediment away",
+    "strength": "weak",
+    "discovered_by": []
+  },
+  {
+    "id": "phosphorus_fuels_algae",
+    "from": ["chla", "total_p", "nitrate"],
+    "to": "chla",
+    "function": "product",
+    "params": { "k": 0.6 },
+    "factors": [
+      { "var": "chla", "shape": "identity" },
+      { "var": "total_p", "shape": "saturating", "half": 40 },
+      { "var": "nitrate", "shape": "saturating", "half": 0.1 }
+    ],
+    "label": "Nutrients fuel algal growth",
+    "strength": "strong",
+    "discovered_by": ["chla", "total_p"]
+  },
+  {
+    "id": "algae_crowding",
+    "from": ["chla"],
+    "to": "chla",
+    "function": "product",
+    "params": { "k": -0.0067 },
+    "factors": [
+      { "var": "chla", "shape": "identity" },
+      { "var": "chla", "shape": "identity" }
+    ],
+    "label": "Self-shading and crowding",
+    "strength": "moderate",
+    "discovered_by": []
+  },
+  {
+    "id": "algae_loss",
+    "from": ["chla"],
+    "to": "chla",
+    "function": "linear",
+    "params": { "k": -0.05 },
+    "label": "Sinking and death",
+    "strength": "weak",
+    "discovered_by": []
+  },
+  {
+    "id": "plants_outcompete_algae",
+    "from": ["chla", "plant_cover"],
+    "to": "chla",
+    "function": "product",
+    "params": { "k": -0.0015 },
+    "label": "Plants compete with algae",
+    "strength": "moderate",
+    "discovered_by": ["chla", "plant_cover"]
+  },
+  {
+    "id": "outflow_flushes_algae",
+    "from": ["water_exchange", "chla"],
+    "to": "chla",
+    "function": "product",
+    "params": { "k": -1 },
+    "label": "Leaving water carries algae away",
+    "strength": "weak",
+    "discovered_by": []
+  },
+  {
+    "id": "inflow_brings_algae",
+    "from": ["water_exchange", "incoming_chla"],
+    "to": "chla",
+    "function": "product",
+    "params": { "k": 1 },
+    "label": "Arriving water carries algae in",
+    "strength": "weak",
+    "discovered_by": []
+  },
+  {
+    "id": "inflow_brings_p",
+    "from": ["water_exchange", "incoming_tp"],
+    "to": "total_p",
+    "function": "product",
+    "params": { "k": 1 },
+    "label": "Arriving water carries phosphorus in",
+    "strength": "moderate",
+    "discovered_by": []
+  },
+  {
+    "id": "outflow_flushes_p",
+    "from": ["water_exchange", "total_p"],
+    "to": "total_p",
+    "function": "product",
+    "params": { "k": -1 },
+    "label": "Leaving water carries phosphorus away",
+    "strength": "weak",
+    "discovered_by": []
+  },
+  {
+    "id": "p_sedimentation",
+    "from": ["total_p"],
+    "to": "total_p",
+    "function": "linear",
+    "params": { "k": -0.03 },
+    "label": "Phosphorus settles with particles",
+    "strength": "moderate",
+    "discovered_by": []
+  },
+  {
+    "id": "anoxic_p_release",
+    "from": ["legacy_p", "bottom_do"],
+    "to": "total_p",
+    "function": "product",
+    "params": { "k": 2.0 },
+    "factors": [
+      { "var": "legacy_p", "shape": "identity" },
+      { "var": "bottom_do", "shape": "threshold", "at": 4.5, "width": 0.7, "direction": "below" }
+    ],
+    "label": "Low oxygen releases bound phosphorus",
+    "strength": "strong",
+    "discovered_by": ["legacy_p", "bottom_do"]
+  },
+  {
+    "id": "baseline_p_release",
+    "from": ["legacy_p"],
+    "to": "total_p",
+    "function": "linear",
+    "params": { "k": 0.3 },
+    "label": "Internal loading from sediment",
+    "strength": "moderate",
+    "discovered_by": ["legacy_p"]
+  },
+  {
+    "id": "carp_excrete_p",
+    "from": ["carp"],
+    "to": "total_p",
+    "function": "linear",
+    "params": { "k": 0.003 },
+    "label": "Excretion and stirring release phosphorus",
+    "strength": "moderate",
+    "discovered_by": ["carp", "total_p"]
+  },
+  {
+    "id": "plants_take_up_p",
+    "from": ["total_p", "plant_cover"],
+    "to": "total_p",
+    "function": "product",
+    "params": { "k": -0.0002 },
+    "label": "Plants and biofilms take up phosphorus",
+    "strength": "weak",
+    "discovered_by": ["total_p", "plant_cover"]
+  },
+  {
+    "id": "inflow_brings_nitrate",
+    "from": ["water_exchange", "incoming_no3"],
+    "to": "nitrate",
+    "function": "product",
+    "params": { "k": 1 },
+    "label": "Arriving water carries nitrate in",
+    "strength": "strong",
+    "discovered_by": []
+  },
+  {
+    "id": "outflow_flushes_nitrate",
+    "from": ["water_exchange", "nitrate"],
+    "to": "nitrate",
+    "function": "product",
+    "params": { "k": -1 },
+    "label": "Leaving water carries nitrate away",
+    "strength": "moderate",
+    "discovered_by": []
+  },
+  {
+    "id": "denitrification",
+    "from": ["nitrate"],
+    "to": "nitrate",
+    "function": "linear",
+    "params": { "k": -0.01 },
+    "label": "Denitrification removes nitrate",
+    "strength": "moderate",
+    "discovered_by": ["nitrate"]
+  },
+  {
+    "id": "decay_consumes_oxygen",
+    "from": ["chla"],
+    "to": "bottom_do",
+    "function": "linear",
+    "params": { "k": -0.13 },
+    "label": "Decaying algae use up oxygen",
+    "strength": "strong",
+    "discovered_by": ["chla", "bottom_do"]
+  },
+  {
+    "id": "plants_oxygenate",
+    "from": ["plant_cover"],
+    "to": "bottom_do",
+    "function": "linear",
+    "params": { "k": 0.02 },
+    "label": "Plants release oxygen near the bed",
+    "strength": "weak",
+    "discovered_by": ["bottom_do", "plant_cover"]
+  },
+  {
+    "id": "p_burial",
+    "from": ["total_p"],
+    "to": "legacy_p",
+    "function": "linear",
+    "params": { "k": 1.2e-06 },
+    "label": "Settling phosphorus is buried",
+    "strength": "weak",
+    "discovered_by": ["legacy_p", "total_p"]
+  },
+  {
+    "id": "legacy_p_depletion",
+    "from": ["legacy_p"],
+    "to": "legacy_p",
+    "function": "linear",
+    "params": { "k": -5e-05 },
+    "label": "Slow burial below the active layer",
+    "strength": "weak",
+    "discovered_by": []
+  },
+  {
+    "id": "carp_reproduction",
+    "from": ["carp", "plant_cover"],
+    "to": "carp",
+    "function": "product",
+    "params": { "k": 0.003 },
+    "factors": [
+      { "var": "carp", "shape": "identity" },
+      { "var": "plant_cover", "shape": "decay", "rate": 0.02 }
+    ],
+    "label": "Spawning succeeds in bare, turbid water",
+    "strength": "moderate",
+    "discovered_by": ["carp", "plant_cover"]
+  },
+  {
+    "id": "carp_crowding",
+    "from": ["carp"],
+    "to": "carp",
+    "function": "product",
+    "params": { "k": -1e-05 },
+    "factors": [
+      { "var": "carp", "shape": "identity" },
+      { "var": "carp", "shape": "identity" }
+    ],
+    "label": "Crowding limits the population",
+    "strength": "weak",
+    "discovered_by": []
+  },
+  {
+    "id": "carp_arrive",
+    "from": ["carp_moving_in"],
+    "to": "carp",
+    "function": "linear",
+    "params": { "k": 1 },
+    "label": "Fish swim in from nearby water and the inlet",
+    "strength": "strong",
+    "discovered_by": ["carp"]
+  },
+  {
+    "id": "carp_leave",
+    "from": ["carp_moving_rate", "carp"],
+    "to": "carp",
+    "function": "product",
+    "params": { "k": -1 },
+    "label": "Fish swim off to nearby water",
+    "strength": "moderate",
+    "discovered_by": ["carp"]
+  }
+]

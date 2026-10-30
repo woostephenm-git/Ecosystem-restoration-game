@@ -1,0 +1,18 @@
+{
+  "id": "clearwater",
+  "values": {
+    "inflow_discharge": { "type": "constant", "value": 500 },
+    "inflow_tp": { "type": "constant", "value": 50 },
+    "inflow_no3": { "type": "constant", "value": 2.5 },
+    "inflow_ss": { "type": "constant", "value": 15 },
+    "carp_immigration": { "type": "constant", "value": 0.6 },
+    "wind": {
+      "type": "seasonal",
+      "mean": 5,
+      "amplitude": 1.5,
+      "period_days": 365,
+      "peak_day": 300,
+      "noise": 1.0
+    }
+  }
+}

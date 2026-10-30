@@ -1,0 +1,135 @@
+{
+  "id": "m01_clearwater_pond",
+  "title": "Clearwater Pond",
+  "briefing": "Clearwater Pond used to be known for its stonewort meadows. Today the water is the colour of milky tea and the bed is bare. The parish council wants the underwater meadows back within three years. Plants need light at the bed, and many things in a shallow pond can steal it. Find out what is stealing it here before you spend the budget.",
+  "map": "maps/clearwater_pond.json",
+  "boundary_conditions": "bc/clearwater.json",
+  "layers_enabled": ["hydrology", "chemistry", "soil", "flora", "fauna"],
+  "budget": 7000,
+  "start": { "year": 1, "day_of_year": 91 },
+  "spinup_days": 1460,
+  "objective": {
+    "variable": "plant_cover",
+    "target": 30,
+    "aggregate": "mean_over_water",
+    "deadline_years": 3,
+    "text": "Reach 30% submerged plant cover across the pond by the end of year 3."
+  },
+  "methods": ["secchi_disk", "water_grab", "oxygen_profile", "fish_survey", "inflow_fish_trap", "sediment_core"],
+  "interventions": ["plant_submerged", "carp_removal", "carp_barrier", "alum_treatment"],
+  "measurement_fresh_days": 30,
+  "limiting_factors": {
+    "title": "What limits plant establishment here",
+    "factors": [
+      {
+        "id": "light",
+        "name": "Light at the bed",
+        "variable": "light_bed",
+        "limiting_when": "below",
+        "threshold": 8,
+        "text": {
+          "unknown": "Water clarity has not been measured, so light at the bed is unknown.",
+          "limiting": "Only {value} of surface light reaches the bed. Submerged plants need about 8 to 10%.",
+          "likely": "Between {lo} and {hi} of surface light reaches the bed. That is probably too dark for plants.",
+          "suspected": "Between {lo} and {hi} of surface light reaches the bed. Plants may be light-limited.",
+          "not_limiting": "{value} of surface light reaches the bed. Enough for plants to grow."
+        }
+      },
+      {
+        "id": "carp",
+        "name": "Sediment disturbance by carp",
+        "variable": "carp",
+        "limiting_when": "above",
+        "threshold": 100,
+        "suspect_when": [{ "var": "secchi", "op": "<", "value": 0.8 }],
+        "text": {
+          "unknown": "No fish data collected.",
+          "suspected": "The water is murky, but the source of the turbidity is unclear.",
+          "limiting": "Carp near {value}, above the roughly 100 kg/ha associated with plant loss in shallow lakes (Bajer et al. 2009).",
+          "likely": "Carp between {lo} and {hi}. Probably enough to uproot plants.",
+          "not_limiting": "Carp near {value}, below the roughly 100 kg/ha associated with plant loss."
+        }
+      },
+      {
+        "id": "sediment",
+        "name": "Suspended sediment",
+        "variable": "suspended_sediment",
+        "limiting_when": "above",
+        "threshold": 15,
+        "suspect_when": [{ "var": "secchi", "op": "<", "value": 0.8 }],
+        "text": {
+          "unknown": "Particles in the water have not been measured.",
+          "suspected": "Low clarity hints at a lot of suspended material.",
+          "limiting": "{value} of suspended sediment is scattering light before it reaches the bed.",
+          "likely": "Between {lo} and {hi} of suspended sediment. Probably cutting light.",
+          "not_limiting": "{value} of suspended sediment. Not a major light thief."
+        }
+      },
+      {
+        "id": "algae",
+        "name": "Algal shading",
+        "variable": "chla",
+        "limiting_when": "above",
+        "threshold": 30,
+        "text": {
+          "unknown": "Phytoplankton not measured.",
+          "suspected": "Algae may be shading the water.",
+          "limiting": "Chl-a at {value} is shading the water column.",
+          "likely": "Chl-a between {lo} and {hi}. Probably shading the water.",
+          "not_limiting": "Chl-a at {value}. Algae are not the main light thief."
+        }
+      },
+      {
+        "id": "nutrients",
+        "name": "Nutrient supply for plants",
+        "variable": "total_p",
+        "limiting_when": "below",
+        "threshold": 10,
+        "text": {
+          "unknown": "Only an estimate of nitrate is available.",
+          "suspected": "Nutrient levels are uncertain.",
+          "limiting": "Phosphorus at {value} is very low. Plants may be short of nutrients.",
+          "likely": "Phosphorus between {lo} and {hi}. Possibly too low for plants.",
+          "not_limiting": "Phosphorus at {value}. Nutrients are abundant. Plants are not short of them."
+        }
+      }
+    ]
+  },
+  "hints": [
+    {
+      "id": "p_higher_than_inflow",
+      "when": [
+        { "var": "total_p", "op": ">", "ratio_of": "inflow_tp", "factor": 1.3 },
+        { "var": "legacy_p", "known": false }
+      ],
+      "text": "Phosphorus in the pond is higher than the inflow can explain. Something inside the pond may be supplying it."
+    },
+    {
+      "id": "planted_in_the_dark",
+      "when": [
+        { "intervention": "plant_submerged", "done": true },
+        { "var": "light_bed", "known": false },
+        { "days_since_intervention": "plant_submerged", "gt": 30 }
+      ],
+      "text": "The new plantings are thinning out. What do they need that this water may not be giving them?"
+    },
+    {
+      "id": "carp_may_return",
+      "when": [
+        { "intervention": "carp_removal", "done": true },
+        { "intervention": "carp_barrier", "done": false },
+        { "days_since_intervention": "carp_removal", "gt": 90 }
+      ],
+      "text": "Carp numbers rarely stay low on their own. Where could new fish come from?"
+    },
+    {
+      "id": "clarity_without_carp_data",
+      "when": [
+        { "var": "secchi", "op": "<", "value": 0.8 },
+        { "var": "suspended_sediment", "op": ">", "value": 15 },
+        { "var": "carp", "known": false }
+      ],
+      "text": "Most of the murk is sediment, not algae. Wind alone rarely keeps this much mud in suspension."
+    }
+  ]
+}

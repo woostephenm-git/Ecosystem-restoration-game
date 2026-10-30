@@ -1,0 +1,10 @@
+[
+  { "id": "geology", "name": "Geology", "color": "#9A9AA6" },
+  { "id": "hydrology", "name": "Hydrology", "color": "#4F8FD6" },
+  { "id": "chemistry", "name": "Chemistry", "color": "#C49BE0" },
+  { "id": "soil", "name": "Soil", "color": "#B88A5E" },
+  { "id": "microbial", "name": "Microbial", "color": "#DCC46E" },
+  { "id": "microclimate", "name": "Microclimate", "color": "#8EC5E8" },
+  { "id": "flora", "name": "Flora", "color": "#7CC27A" },
+  { "id": "fauna", "name": "Fauna", "color": "#F0A35E" }
+]
