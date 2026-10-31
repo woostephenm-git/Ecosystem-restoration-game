@@ -8,6 +8,7 @@ An isometric ecosystem restoration game about diagnosis: symptoms appear in one 
 npm install
 npm run dev        # play at http://localhost:5173 (add ?seed=123 for a fixed seed)
                    # the dev server starts with a $100,000 testing budget; ?budget=7000 plays the real one
+                   # the map is 3D (three.js); ?map=2d shows the flat SVG map instead
 npm test           # unit and scripted mission tests
 npm run sim -- solution   # headless run of a scripted plan, prints pond state every 60 days
 ```
@@ -27,7 +28,8 @@ src/sim/              headless simulation core: no DOM, no rendering
   grid.ts             map geometry: neighbours, D8 flow directions, flow accumulation
   knowledge.ts        what the player knows: unknown / estimate (bounds) / measured
   game.ts             budget, sampling, interventions, link discovery, limiting factors, hints, outcome
-src/ui/               investigation view (vanilla TypeScript, renders from Game)
+src/ui/               investigation view and map (vanilla TypeScript, renders from Game)
+  scene/              3D map, ported from the Marsh Specimen Bench artifact: terrain, water, plants, fish
 tests/                vitest: function library, loader, engine, knowledge, Mission 1 scenarios
 scripts/              tuning helpers
 ```
@@ -49,6 +51,7 @@ These were marked Open or Proposed in the design doc. Each is easy to change.
 - **Engine:** TypeScript + Vite in the browser, chosen over Godot 4. The sim core has no browser dependencies and could be ported.
 - **Failure state:** the objective is scored at the deadline from the true state, then the player can keep running the pond as a sandbox.
 - **Budget:** one shared budget ($7,000) for sampling and interventions. The dev server overrides it with $100,000 for testing (`TESTING_BUDGET` in `src/ui/main.ts`). Production builds use the mission's budget.
+- **3D map:** each sim tile covers 4×4 scene units. The pond bed comes from the measured tile depths. Water colour, plants and drawn fish come from what the player knows. Ripples and silt plumes follow the fish actually present, as a visible cue (the artifact's design). Shore vegetation and trees are scenery; the sim does not model them. The flat SVG map is the fallback when WebGL is unavailable.
 - **Scales:** every variable has a typical range (`scale` in `data/variables.json`), with an optional reference mark (a threshold or target). Gauges show low, mid or high by thirds of that range.
 - **Measurement staleness:** visual observations update daily. Coarse-visible variables fall back to a visual estimate 30 days after a measurement. Lab-only variables keep their last measurement and are tagged with their age.
 - **Pin coordinates:** `pin.y` is a fraction of the variable's zone height, not of the whole drawing, so pins stay in their zone when zone heights change.

@@ -1241,3 +1241,120 @@ button:focus-visible {
 .card {
   min-height: 60px;
 }
+
+/* 3D map stage (from the Marsh Specimen Bench artifact). Dark in every theme: it is a viewport. */
+.mapwrap.is3d {
+  background: #11171e;
+  border-color: #2b3745;
+}
+.stage3d {
+  position: relative;
+  height: clamp(420px, 64vh, 700px);
+  color: #dfe6ec;
+  font-family: var(--sans);
+}
+.stage3d canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.s-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.s-tile,
+.s-bnd {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+.s-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: var(--mono);
+  text-shadow: 0 1px 2px #000, 0 0 6px rgba(0, 0, 0, 0.8);
+}
+.s-tile b {
+  font: 600 12px var(--sans);
+  color: #ffffff;
+  opacity: 0.85;
+}
+.s-tile.sel b {
+  opacity: 1;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.s-tile span {
+  font-size: 12.5px;
+  color: #ffffff;
+}
+.s-bnd {
+  background: color-mix(in oklab, #18202a 88%, transparent);
+  border: 1px solid #2b3745;
+  border-radius: 6px;
+  padding: 6px 9px;
+  font: 11px/1.45 var(--mono);
+  color: #b9c4cd;
+  white-space: nowrap;
+}
+.s-bnd .t {
+  font: 600 12px var(--sans);
+  color: #dfe6ec;
+  margin-bottom: 2px;
+}
+.s-hud {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: color-mix(in oklab, #18202a 88%, transparent);
+  border: 1px solid #2b3745;
+  border-radius: 6px;
+  padding: 8px 10px;
+  pointer-events: none;
+  max-width: calc(100% - 24px);
+}
+.s-hud-tile {
+  font: 500 13px var(--mono);
+}
+.s-hud-info {
+  font: 11.5px var(--mono);
+  color: #8a98a6;
+  margin-top: 2px;
+}
+.s-hint {
+  position: absolute;
+  bottom: 10px;
+  left: 12px;
+  right: 90px;
+  font-size: 11.5px;
+  color: #8a98a6;
+  pointer-events: none;
+}
+.s-compass {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  width: 64px;
+  height: 64px;
+  pointer-events: none;
+  opacity: 0.85;
+}
+.s-compass svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.s-compass text {
+  font: 600 10px var(--mono);
+  fill: #8a98a6;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.s-compass text.n {
+  fill: #dfe6ec;
+}

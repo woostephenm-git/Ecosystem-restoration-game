@@ -5,6 +5,7 @@ import type { FactorStatus, Game } from '../sim/game';
 import { OFF_MAP, type GridTile } from '../sim/grid';
 import { bounds, type Known } from '../sim/knowledge';
 import { gauge } from './gauge';
+import type { SceneState, SceneTile } from './scene/pondScene';
 import { esc, header, interventionsPanel, knownText, logPanel, modals, objectivePanel, type UiState } from './view';
 
 const TW = 170; // tile width on screen
@@ -91,13 +92,14 @@ function mid(k: Known): number | null {
   return b ? (b.lo + b.hi) / 2 : null;
 }
 
-export function renderMap(game: Game, ui: UiState): string {
+/** `use3d`: the 3D scene is mounted into #map-slot after rendering; otherwise draw the SVG map. */
+export function renderMap(game: Game, ui: UiState, use3d = false): string {
   return `${header(game, ui)}
   <main class="layout">
     <section class="left" aria-label="Pond map">
       ${overlayChips(game, ui)}
-      <div class="mapwrap">${mapSvg(game, ui)}</div>
-      ${legend(game, ui)}
+      <div class="mapwrap ${use3d ? 'is3d' : ''}" id="map-slot">${use3d ? '' : mapSvg(game, ui)}</div>
+      ${legend(game, ui, use3d)}
       ${interventionsPanel(game, ui.tileId)}
     </section>
     <aside class="right" aria-label="Pond overview">
@@ -317,16 +319,19 @@ function overlayScale(game: Game, variableId: string) {
   return { lo, hi, t: (x: number) => 0.15 + 0.85 * ((x - lo) / (hi - lo)) };
 }
 
-function legend(game: Game, ui: UiState): string {
+function legend(game: Game, ui: UiState, use3d = false): string {
   if (ui.overlay === 'surface') {
-    return `<div class="legend"><span>Surface view: water colour from visible clarity, green tufts for visible plants. Dashed arrows show water flow. Carp appear once surveyed.</span><span class="muted">Click a tile to select it, click again to investigate.</span></div>`;
+    const text = use3d
+      ? 'Surface view: water colour from visible clarity, plants from visible cover. Ripples and silt plumes hint at fish; the fish themselves appear once surveyed.'
+      : 'Surface view: water colour from visible clarity, green tufts for visible plants. Dashed arrows show water flow. Carp appear once surveyed.';
+    return `<div class="legend"><span>${text}</span><span class="muted">Click a tile to select it, click again to investigate.</span></div>`;
   }
   const v = game.data.variables.get(ui.overlay)!;
   const s = overlayScale(game, v.id);
   const color = game.data.layers.get(v.layer)!.color;
   const unknown = game.waterTileIds().filter((id) => !game.knowledge.isKnown(id, v.id)).length;
   return `<div class="legend">
-    <span class="ramp" style="background:linear-gradient(90deg, ${ramp(color, 0)}, ${ramp(color, 1)})"></span>
+    <span class="ramp" style="background:linear-gradient(90deg, ${use3d ? `${mix('#1B2A33', color, 0.15)}, ${color}` : `${ramp(color, 0)}, ${ramp(color, 1)}`})"></span>
     <span class="mono">${fmtUnit(v, s.lo)} to ${fmtUnit(v, s.hi)}</span>
     <span><span class="swatch hatch"></span> estimate (range shown)</span>
     <span><span class="swatch unk"></span> ? not known${unknown ? ` on ${unknown} of ${game.waterTileIds().length} tiles` : ''}</span>
@@ -357,6 +362,8 @@ function tilePanel(game: Game, ui: UiState): string {
     <div class="orow"><span>Water flows to</span><span>${esc(flux.to)}</span></div>
     <div class="label" style="margin-top:4px">${esc(game.mission.limiting_factors.title)}</div>
     <div class="fchips">${factors}</div>
+    <div class="label" style="margin-top:4px">Select a tile</div>
+    ${tilePicker(game, ui)}
     <button type="button" class="btn primary" data-action="open-tile:${t.id}">Investigate tile ${t.id}</button>
   </div>`;
 }
@@ -382,4 +389,73 @@ function boundaryPanel(game: Game): string {
     ${ids.map(row).join('')}
     ${barrier ? `<div class="bnote">${esc(barrier)}: blocks most adult carp coming from upstream.</div>` : ''}
   </div>`;
+}
+
+/** Keyboard-friendly copy of the grid: the 3D canvas cannot take focus per tile. */
+function tilePicker(game: Game, ui: UiState): string {
+  const g = game.sim.grid;
+  const cells = g.tiles
+    .map(
+      (t) =>
+        `<button type="button" class="tilebtn ${t.id === ui.tileId ? 'on' : ''}" data-action="tile:${t.id}" aria-label="Select tile ${t.id}, ${esc(t.description)}" aria-pressed="${t.id === ui.tileId}" style="grid-row:${t.row + 1};grid-column:${t.col + 1}">${t.id}</button>`,
+    )
+    .join('');
+  return `<div class="switcher" role="group" aria-label="Tiles" style="grid-template-columns:repeat(${g.cols}, 30px)">${cells}</div>`;
+}
+
+/** What the 3D scene draws, built from what the player knows (plus visible cues). */
+export function sceneState(game: Game, ui: UiState): SceneState {
+  const g = game.sim.grid;
+  const overlay = ui.overlay === 'surface' ? null : game.data.variables.get(ui.overlay)!;
+  const scale = overlay ? overlayScale(game, overlay.id) : null;
+  const tiles: SceneTile[] = g.tiles.map((t) => {
+    const depthK = game.known(t.id, 'water_depth');
+    const secchi = mid(game.known(t.id, 'secchi')) ?? 0.5;
+    const carp = game.known(t.id, 'carp');
+    let ov: SceneTile['overlay'] = null;
+    if (overlay && scale) {
+      const k = game.known(t.id, overlay.id);
+      const b = bounds(k);
+      if (!b) ov = { color: '#7D868A', opacity: 0.35, label: '?' };
+      else
+        ov = {
+          // The 3D stage is dark, so low values are dark and high values bright.
+          color: mix('#1B2A33', game.data.layers.get(overlay.layer)!.color, scale.t((b.lo + b.hi) / 2)),
+          opacity: k.state === 'estimate' ? 0.5 : 0.75,
+          label: k.state === 'estimate' ? `${fmt(overlay, b.lo)}–${fmt(overlay, b.hi)} EST` : fmtUnit(overlay, b.lo),
+        };
+    }
+    return {
+      id: t.id,
+      row: t.row,
+      col: t.col,
+      description: t.description,
+      depth: depthK.state === 'measured' ? depthK.value : 1,
+      turbidity: 1 - Math.min(1, Math.max(0, (secchi - 0.25) / 1.75)),
+      cover: (mid(game.known(t.id, 'plant_cover')) ?? 0) / 100,
+      fishShown: carp.state === 'measured' ? Math.min(1, carp.value / 400) : 0,
+      // Ripples and silt plumes are visible from the bank, so they follow the fish actually there.
+      fishCue: Math.min(1, (game.sim.tiles[t.index].values.carp ?? 0) / 450),
+      overlay: ov,
+    };
+  });
+  const inletLines = (tileId: string) =>
+    ['inflow_discharge', 'inflow_tp', 'inflow_no3', 'inflow_ss', 'carp_immigration'].map((id) => {
+      const v = game.data.variables.get(id)!;
+      const kt = knownText(v, game.known(tileId, id));
+      return `${v.name.replace(/^Inflow /, '').replace(/^\w/, (c) => c.toUpperCase())}: ${kt.unknown ? '?' : kt.text}`;
+    });
+  const barrier = barrierState(game);
+  const any = g.tiles[0].id;
+  const discharge = game.known(any, 'inflow_discharge');
+  const wind = game.known(any, 'wind');
+  return {
+    tiles,
+    selected: ui.tileId,
+    inlets: g.map.inlets.map((i) => ({ tile: i.tile, face: i.face, name: i.name, lines: [...inletLines(i.tile), ...(barrier ? [barrier] : [])].map(esc) })),
+    outlets: g.map.outlets.map((o) => ({ tile: o.tile, face: o.face, name: o.name, lines: [`Leaves from ${o.tile}`] })),
+    barrier: barrier === null ? 'none' : barrier.includes('being built') ? 'building' : 'in_place',
+    discharge: discharge.state === 'measured' ? discharge.value / 500 : 1,
+    wind: wind.state === 'measured' ? Math.min(1, wind.value / 12) : 0.4,
+  };
 }

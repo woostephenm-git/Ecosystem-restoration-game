@@ -1,7 +1,8 @@
 import { loadBrowserData } from '../data/browser';
 import { Game } from '../sim/game';
 import './styles.css';
-import { renderMap } from './mapView';
+import { renderMap, sceneState } from './mapView';
+import { PondScene } from './scene/pondScene';
 import { renderTile, type UiState } from './view';
 
 const MISSION = 'm01_clearwater_pond';
@@ -61,10 +62,36 @@ function draw() {
   // Keep focus on the same control across re-renders so keyboard play works.
   const focused = (document.activeElement as HTMLElement | null)?.dataset?.action;
   const scroll = root.querySelector('.xsec-scroll')?.scrollLeft ?? 0;
-  root.innerHTML = ui.screen === 'map' ? renderMap(game, ui) : renderTile(game, ui);
+  root.innerHTML = ui.screen === 'map' ? renderMap(game, ui, use3d) : renderTile(game, ui);
+  if (ui.screen === 'map' && use3d) mountScene();
   const xs = root.querySelector('.xsec-scroll');
   if (xs) xs.scrollLeft = scroll;
   if (focused) (root.querySelector(`[data-action="${CSS.escape(focused)}"]`) as HTMLElement | null)?.focus();
+}
+
+// The 3D map persists across redraws: its element is moved into the fresh slot each time,
+// so the WebGL context, camera and animation state survive. ?map=2d forces the SVG map.
+const use3d = params.get('map') !== '2d' && PondScene.supported();
+let scene: PondScene | null = null;
+function mountScene() {
+  const slot = root.querySelector('#map-slot');
+  if (!slot) return;
+  const state = sceneState(game, ui);
+  if (!scene) scene = new PondScene(state, game.sim.grid.rows, game.sim.grid.cols, onMapTile);
+  slot.appendChild(scene.element);
+  scene.update(state);
+  scene.start();
+}
+
+/** First click on a map tile selects it; clicking the selected tile opens it. */
+function selectTile(id: string) {
+  if (ui.tileId === id) ui.screen = 'tile';
+  ui.tileId = id;
+}
+
+function onMapTile(id: string) {
+  selectTile(id);
+  draw();
 }
 
 /** Light theme on the map, ochre in the investigation view. */
@@ -93,9 +120,7 @@ root.addEventListener('click', (e) => {
       ui.overlay = arg;
       break;
     case 'tile':
-      // First click selects a tile on the map; clicking the selected tile opens it.
-      if (ui.tileId === arg) ui.screen = 'tile';
-      ui.tileId = arg;
+      selectTile(arg);
       break;
     case 'open-tile':
       ui.tileId = arg;
