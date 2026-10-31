@@ -11,7 +11,12 @@ const DAYS_PER_SECOND = { 0: 0, 1: 7, 4: 30 } as const;
 const params = new URLSearchParams(location.search);
 const seed = Number(params.get('seed') ?? Math.floor(Math.random() * 1e9));
 const data = loadBrowserData();
-const game = new Game(data, MISSION, seed);
+// The dev server starts with a large testing budget; ?budget=7000 restores the mission's own.
+// Production builds use the mission budget unless the URL overrides it.
+const TESTING_BUDGET = 100_000;
+const budgetParam = params.get('budget');
+const budget = budgetParam !== null ? Number(budgetParam) : import.meta.env.DEV ? TESTING_BUDGET : undefined;
+const game = new Game(data, MISSION, seed, { budget });
 const tiles = game.sim.grid.tiles;
 const centre = tiles.find((t) => t.row === Math.floor(game.sim.grid.rows / 2) && t.col === Math.floor(game.sim.grid.cols / 2)) ?? tiles[0];
 

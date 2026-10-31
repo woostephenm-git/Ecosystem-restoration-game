@@ -4,7 +4,7 @@ import type { Game } from '../sim/game';
 import { bounds } from '../sim/knowledge';
 
 export const DRAW_W = 240;
-export const ZONE_H: Record<string, number> = { air: 130, water: 290, sediment: 150, bedrock: 90 };
+export const ZONE_H: Record<string, number> = { air: 130, water: 330, sediment: 140, bedrock: 90 };
 
 export function zoneTop(zoneId: string, zoneOrder: string[]): number {
   let y = 0;

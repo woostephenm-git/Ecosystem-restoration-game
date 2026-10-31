@@ -7,6 +7,7 @@ An isometric ecosystem restoration game about diagnosis: symptoms appear in one 
 ```bash
 npm install
 npm run dev        # play at http://localhost:5173 (add ?seed=123 for a fixed seed)
+                   # the dev server starts with a $100,000 testing budget; ?budget=7000 plays the real one
 npm test           # unit and scripted mission tests
 npm run sim -- solution   # headless run of a scripted plan, prints pond state every 60 days
 ```
@@ -47,7 +48,8 @@ These were marked Open or Proposed in the design doc. Each is easy to change.
 
 - **Engine:** TypeScript + Vite in the browser, chosen over Godot 4. The sim core has no browser dependencies and could be ported.
 - **Failure state:** the objective is scored at the deadline from the true state, then the player can keep running the pond as a sandbox.
-- **Budget:** one shared budget ($7,000) for sampling and interventions.
+- **Budget:** one shared budget ($7,000) for sampling and interventions. The dev server overrides it with $100,000 for testing (`TESTING_BUDGET` in `src/ui/main.ts`). Production builds use the mission's budget.
+- **Scales:** every variable has a typical range (`scale` in `data/variables.json`), with an optional reference mark (a threshold or target). Gauges show low, mid or high by thirds of that range.
 - **Measurement staleness:** visual observations update daily. Coarse-visible variables fall back to a visual estimate 30 days after a measurement. Lab-only variables keep their last measurement and are tagged with their age.
 - **Pin coordinates:** `pin.y` is a fraction of the variable's zone height, not of the whole drawing, so pins stay in their zone when zone heights change.
 - **Grid scale:** 50 m tiles. Clearwater Pond is 3×3 tiles (2.25 ha), with depths from 0.6 m in the margins to 1.6 m in the centre.

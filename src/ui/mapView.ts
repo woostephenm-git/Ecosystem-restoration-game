@@ -4,6 +4,7 @@ import { fmt, fmtUnit } from '../sim/format';
 import type { FactorStatus, Game } from '../sim/game';
 import { OFF_MAP, type GridTile } from '../sim/grid';
 import { bounds, type Known } from '../sim/knowledge';
+import { gauge } from './gauge';
 import { esc, header, interventionsPanel, knownText, logPanel, modals, objectivePanel, type UiState } from './view';
 
 const TW = 170; // tile width on screen
@@ -340,7 +341,8 @@ function tilePanel(game: Game, ui: UiState): string {
       const v = game.data.variables.get(id)!;
       const kt = knownText(v, game.known(t.id, id));
       const val = kt.unknown ? '?' : kt.est ? `${kt.text} ${v.unit}` : kt.text;
-      return `<div class="orow"><span>${esc(v.name)}</span><span class="mono">${esc(val)}${kt.est ? ' <span class="est">EST</span>' : ''}</span></div>`;
+      const k = game.known(t.id, id);
+      return `<div class="orow gauged"><span>${esc(v.name)}</span><span class="mono">${esc(val)}${kt.est ? ' <span class="est">EST</span>' : ''}</span>${gauge(v, k)}</div>`;
     })
     .join('');
   const flux = game.sim.edgeFluxes(t.id);
@@ -366,7 +368,7 @@ function boundaryPanel(game: Game): string {
     const v = game.data.variables.get(id)!;
     const kt = knownText(v, game.known(inletTile, id));
     const val = kt.unknown ? '? not measured' : kt.text;
-    return `<button type="button" class="brow" data-action="inspect-boundary:${id}"><span>${esc(v.name)}</span><span class="mono">${esc(val)}</span></button>`;
+    return `<button type="button" class="brow" data-action="inspect-boundary:${id}"><span>${esc(v.name)}</span><span class="mono">${esc(val)}</span>${gauge(v, game.known(inletTile, id))}</button>`;
   };
   const watershed = game.data.boundaryConditions.get(game.mission.boundary_conditions)!;
   const ids = Object.keys(watershed.values).filter((id) => game.data.variables.get(id)!.zone !== 'air');

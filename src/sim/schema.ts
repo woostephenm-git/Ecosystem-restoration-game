@@ -57,6 +57,19 @@ export const VariableSchema = z
     initial_knowledge: z.enum(['unknown', 'estimate', 'measured']),
     estimate: z.object({ spread: z.number().positive(), source: z.string() }).optional(),
     display_decimals: z.number().int().min(0),
+    /**
+     * Typical range for this kind of site, so the UI can show at a glance whether a value is
+     * high or low. `log` for variables spanning orders of magnitude. `reference` marks a
+     * meaningful level (a threshold or target).
+     */
+    scale: z
+      .object({
+        min: z.number(),
+        max: z.number(),
+        log: z.boolean().optional(),
+        reference: z.object({ value: z.number(), label: z.string() }).optional(),
+      })
+      .refine((s) => s.max > s.min && (!s.log || s.min > 0), 'scale needs max > min, and min > 0 when log'),
     min: z.number().optional(),
     max: z.number().optional(),
     pin: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }),
@@ -215,6 +228,20 @@ export const MissionSchema = z.object({
     ),
   }),
   hints: z.array(z.object({ id, when: z.array(ConditionSchema).min(1), text: z.string() })),
+  /** Pond-wide means recorded at the start and by the final survey, shown side by side. */
+  final_survey: z.array(id).min(1),
+  /** Shown when the objective is met. Text may use {variable_id}, {target}, {budget_left} and {date}. */
+  success_letter: z
+    .object({
+      from: z.string(),
+      address: z.string(),
+      salutation: z.string(),
+      paragraphs: z.array(z.string()).min(1),
+      signoff: z.string(),
+      signature: z.string(),
+      role: z.string(),
+    })
+    .optional(),
 });
 
 export type Layer = z.infer<typeof LayerSchema>;

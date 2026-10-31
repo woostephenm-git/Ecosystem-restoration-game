@@ -28,6 +28,15 @@ export interface Outcome {
   success: boolean;
   value: number;
   target: number;
+  /** True pond-wide means from the final survey, keyed by variable. */
+  survey: Record<string, number>;
+  /** Mission day the outcome was decided. */
+  day: number;
+}
+
+export interface GameOptions {
+  /** Starting budget, overriding the mission's. For testing and playtesting. */
+  budget?: number;
 }
 
 export interface Availability {
@@ -46,19 +55,23 @@ export class Game {
   readonly interventionsDone: { id: string; day: number; tileId: string }[] = [];
   samplesTaken = 0;
   outcome: Outcome | null = null;
+  /** True pond-wide means when the mission clock started, for before-and-after comparison. */
+  readonly startSurvey: Record<string, number>;
 
   constructor(
     readonly data: DataBundle,
     missionId: string,
     seed: number,
+    options: GameOptions = {},
   ) {
     const mission = data.missions.get(missionId);
     if (!mission) throw new Error(`Unknown mission ${missionId}`);
     this.mission = mission;
-    this.budget = mission.budget;
+    this.budget = options.budget ?? mission.budget;
     this.sim = new Simulation(data, mission, seed);
     this.sim.step(mission.spinup_days);
     this.knowledge = new Knowledge(this.sim, mission.measurement_fresh_days, new Rng(seed).fork(2));
+    this.startSurvey = this.survey();
   }
 
   get day(): number {
@@ -167,7 +180,7 @@ export class Game {
   private evaluateOutcome() {
     const o = this.mission.objective;
     const value = this.sim.aggregate(o.variable);
-    this.outcome = { success: value >= o.target, value, target: o.target };
+    this.outcome = { success: value >= o.target, value, target: o.target, survey: this.survey(), day: this.day };
     const v = this.data.variables.get(o.variable)!;
     this.log.push({
       day: this.day,
@@ -176,6 +189,10 @@ export class Game {
         ? `Deadline reached. Final survey: ${fmtUnit(v, value)} ${v.name.toLowerCase()}. Objective met.`
         : `Deadline reached. Final survey: ${fmtUnit(v, value)} ${v.name.toLowerCase()}. Objective not met.`,
     });
+  }
+
+  private survey(): Record<string, number> {
+    return Object.fromEntries(this.mission.final_survey.map((id) => [id, this.sim.aggregate(id)]));
   }
 
   /** Measured anywhere, ever. Inferred variables count once all their inputs have been. */

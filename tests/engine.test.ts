@@ -7,7 +7,7 @@ const files = readRawFiles();
 const data = loadData(files);
 const mission = data.missions.get('m01_clearwater_pond')!;
 
-const stub = { observable: 'none', initial_knowledge: 'unknown', display_decimals: 2, pin: { x: 0, y: 0 } };
+const stub = { observable: 'none', initial_knowledge: 'unknown', display_decimals: 2, scale: { min: 0, max: 1 }, pin: { x: 0, y: 0 } };
 const none = { fn: 'none' };
 
 /** A tiny world: a decaying stock, a slow stock, and two chained derived variables. */
@@ -33,6 +33,8 @@ function toyData() {
     map: 'maps/toy.json',
     boundary_conditions: 'bc/toy.json',
     objective: { ...mission.objective, variable: 'x' },
+    final_survey: ['x'],
+    success_letter: undefined,
     limiting_factors: { title: '', factors: [] },
     hints: [],
     methods: [],

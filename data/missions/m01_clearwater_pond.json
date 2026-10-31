@@ -6,7 +6,10 @@
   "boundary_conditions": "bc/clearwater.json",
   "layers_enabled": ["hydrology", "chemistry", "soil", "flora", "fauna"],
   "budget": 7000,
-  "start": { "year": 1, "day_of_year": 91 },
+  "start": {
+    "year": 1,
+    "day_of_year": 91
+  },
   "spinup_days": 1460,
   "objective": {
     "variable": "plant_cover",
@@ -41,7 +44,9 @@
         "variable": "carp",
         "limiting_when": "above",
         "threshold": 100,
-        "suspect_when": [{ "var": "secchi", "op": "<", "value": 0.8 }],
+        "suspect_when": [
+          { "var": "secchi", "op": "<", "value": 0.8 }
+        ],
         "text": {
           "unknown": "No fish data collected.",
           "suspected": "The water is murky, but the source of the turbidity is unclear.",
@@ -56,7 +61,9 @@
         "variable": "suspended_sediment",
         "limiting_when": "above",
         "threshold": 15,
-        "suspect_when": [{ "var": "secchi", "op": "<", "value": 0.8 }],
+        "suspect_when": [
+          { "var": "secchi", "op": "<", "value": 0.8 }
+        ],
         "text": {
           "unknown": "Particles in the water have not been measured.",
           "suspected": "Low clarity hints at a lot of suspended material.",
@@ -131,5 +138,20 @@
       ],
       "text": "Most of the murk is sediment, not algae. Wind alone rarely keeps this much mud in suspension."
     }
-  ]
+  ],
+  "final_survey": ["plant_cover", "secchi", "light_bed", "suspended_sediment", "chla", "total_p", "carp"],
+  "success_letter": {
+    "from": "Clearwater Parish Council",
+    "address": "The Village Hall, Mill Lane, Clearwater",
+    "salutation": "Dear Restoration Team,",
+    "paragraphs": [
+      "On behalf of the Parish Council, and of everyone who walks the path around Clearwater Pond, thank you. Three years ago the water was the colour of milky tea. This summer the children on the jetty could see the bottom again.",
+      "Your final survey found {plant_cover} of the bed covered in submerged plants, against the {target} we had hoped for. The water now stays clear to a Secchi depth of {secchi}, and carp are down to {carp}.",
+      "We will admit that some of us expected you simply to plant the pond and go home. We are glad you looked closer first, and that you stopped the fish coming back up the inlet.",
+      "The stonewort meadows are back. Please come and see them. The Council would be pleased to welcome you at the summer fete, where the pond will be the first stop on the nature walk."
+    ],
+    "signoff": "With warmest thanks,",
+    "signature": "Margaret Hale",
+    "role": "Clerk to the Parish Council"
+  }
 }

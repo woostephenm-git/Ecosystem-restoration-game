@@ -6,6 +6,7 @@ import type { Known } from '../sim/knowledge';
 import type { NormalLink } from '../sim/loader';
 import type { Variable } from '../sim/schema';
 import { DRAW_W, ZONE_H, drawTile } from './drawing';
+import { gauge } from './gauge';
 
 export interface UiState {
   screen: 'map' | 'tile';
@@ -100,7 +101,7 @@ function tileSwitcher(game: Game, ui: UiState): string {
     .sort((a, b) => a.row - b.row || a.col - b.col)
     .map(
       (t) =>
-        `<button type="button" class="mini ${t.id === ui.tileId ? 'on' : ''}" data-action="open-tile:${t.id}" aria-label="Tile ${t.id}, ${esc(t.description)}" aria-pressed="${t.id === ui.tileId}" style="grid-row:${t.row + 1};grid-column:${t.col + 1}">${t.id}</button>`,
+        `<button type="button" class="tilebtn ${t.id === ui.tileId ? 'on' : ''}" data-action="open-tile:${t.id}" aria-label="Tile ${t.id}, ${esc(t.description)}" aria-pressed="${t.id === ui.tileId}" style="grid-row:${t.row + 1};grid-column:${t.col + 1}">${t.id}</button>`,
     )
     .join('');
   return `<div class="switcher" role="group" aria-label="Switch tile" style="grid-template-columns:repeat(${g.cols}, 30px)">${cells}</div>`;
@@ -161,7 +162,7 @@ function crossSection(game: Game, ui: UiState): string {
             const kt = knownText(v, k);
             const name = side === 'inflow' ? v.name.replace(/^Incoming /, '').replace(/^\w/, (c) => c.toUpperCase()) : v.name;
             const val = kt.unknown ? '?' : kt.text + (kt.est ? ' EST' : '');
-            return `<button type="button" class="flux ${ui.selected === v.id ? 'sel' : ''}" data-action="select:${v.id}"><span class="fn">${esc(name)}</span><span class="fv mono">${esc(val)}</span></button>`;
+            return `<button type="button" class="flux ${ui.selected === v.id ? 'sel' : ''}" data-action="select:${v.id}"><span class="fn">${esc(name)}</span><span class="fv mono">${esc(val)}</span>${gauge(v, k)}</button>`;
           })
           .join('');
         const water = z.id === 'water';
@@ -196,6 +197,7 @@ function crossSection(game: Game, ui: UiState): string {
           return `<button type="button" class="card ${sel ? 'sel' : ''} ${dim ? 'dim' : ''}" data-action="select:${v.id}" aria-pressed="${sel}">
             <span class="cname"><span class="dot" style="background:${color}"></span>${esc(v.name)}</span>
             <span class="cval">${value}</span>
+            ${gauge(v, k)}
           </button>`;
         })
         .join('');
@@ -273,6 +275,7 @@ export function objectivePanel(game: Game): string {
     <div class="label">Mission objective</div>
     <div class="otext">${esc(o.text)}</div>
     <div class="orow"><span>Pond mean now</span><span class="mono">${esc(kt.est ? `${kt.text} ${v.unit}` : kt.text)}${kt.est ? ' <span class="est">EST</span>' : ''}</span></div>
+    ${gauge(v, k, 'full')}
     <div class="orow"><span>Target</span><span class="mono">${fmtUnit(v, o.target)}</span></div>
     <div class="progress" role="progressbar" aria-label="Time elapsed" aria-valuenow="${pct.toFixed(0)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct.toFixed(1)}%"></span></div>
     <div class="osub">${game.outcome ? (game.outcome.success ? 'Objective met at the deadline.' : 'Deadline passed. Objective not met.') : `${left} days left`}</div>
@@ -323,6 +326,7 @@ function selectedPanel(game: Game, ui: UiState): string {
   return `<div class="box sel">
     <div class="selhead"><span class="dot big" style="background:${layer.color}"></span><span class="muted">${esc(layer.name)} layer · ${esc(v.kind === 'boundary' ? 'Inflow face' : zone.name)}</span></div>
     <div class="selrow"><div class="selname">${esc(v.name)}</div><div class="selval mono">${esc(valueText)}${kt.est ? ' <span class="est">EST</span>' : ''}</div></div>
+    ${gauge(v, k, 'full')}
     <div class="muted small">${esc(sourceText(game, v, k))}</div>
     ${
       k.state === 'estimate'
@@ -384,14 +388,80 @@ function briefing(game: Game): string {
   </div></div>`;
 }
 
+/** Start and final pond-wide means, side by side, with the objective's target. */
+function surveyTable(game: Game): string {
+  const o = game.outcome!;
+  const objective = game.mission.objective;
+  const rows = game.mission.final_survey
+    .map((id) => {
+      const v = game.data.variables.get(id)!;
+      const target = id === objective.variable ? `<span class="muted target"> target ${fmtUnit(v, objective.target)}</span>` : '';
+      return `<tr><th scope="row">${esc(v.name)}</th><td class="mono">${fmtUnit(v, game.startSurvey[id])}</td><td aria-hidden="true">→</td><td class="mono strong">${fmtUnit(v, o.survey[id])}${target}</td></tr>`;
+    })
+    .join('');
+  return `<table class="survey"><caption class="label">Final survey, pond-wide means</caption><thead><tr><th></th><th scope="col">Year 1</th><th></th><th scope="col">Deadline</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+/** Fill {variable_id}, {target}, {budget_left} and {date} in mission text from the final survey. */
+function fillLetter(game: Game, text: string): string {
+  const o = game.outcome!;
+  const objective = game.data.variables.get(game.mission.objective.variable)!;
+  return text.replace(/\{(\w+)\}/g, (whole, key: string) => {
+    if (key in o.survey) return fmtUnit(game.data.variables.get(key)!, o.survey[key]);
+    if (key === 'target') return fmtUnit(objective, o.target);
+    if (key === 'budget_left') return fmtMoney(game.budget);
+    if (key === 'date') return calendar(o.day, game.mission.start.day_of_year).label;
+    return whole;
+  });
+}
+
+function letter(game: Game): string {
+  const l = game.mission.success_letter;
+  if (!l) return '';
+  const f = (t: string) => esc(fillLetter(game, t));
+  return `<article class="letter" aria-label="Letter from ${esc(l.from)}">
+    <div class="seal" aria-hidden="true">${esc(l.from.split(' ').map((w) => w[0]).join(''))}</div>
+    <header><div class="lfrom">${esc(l.from)}</div><div class="laddr">${esc(l.address)}</div><div class="ldate">${esc(calendar(game.outcome!.day, game.mission.start.day_of_year).label)}</div></header>
+    <p>${esc(l.salutation)}</p>
+    ${l.paragraphs.map((p) => `<p>${f(p)}</p>`).join('')}
+    <p>${esc(l.signoff)}</p>
+    <p class="lsig">${esc(l.signature)}</p>
+    <p class="lrole">${esc(l.role)}</p>
+  </article>`;
+}
+
+/** Falling leaves for the win screen. Decorative; hidden when the player prefers reduced motion. */
+function leaves(): string {
+  const colors = ['#7CC27A', '#5FA35A', '#A7D18C', '#E3B341', '#4F8FD6'];
+  return Array.from({ length: 28 }, (_, i) => {
+    const r = (n: number) => (Math.sin(i * 12.9898 + n * 78.233) * 43758.5453) % 1;
+    const left = Math.abs(r(1)) * 100;
+    const delay = Math.abs(r(2)) * 4;
+    const dur = 5 + Math.abs(r(3)) * 5;
+    return `<span class="leaf" style="left:${left.toFixed(1)}%;animation-delay:${delay.toFixed(2)}s;animation-duration:${dur.toFixed(2)}s;background:${colors[i % colors.length]}"></span>`;
+  }).join('');
+}
+
 function outcomeModal(game: Game): string {
   const o = game.outcome!;
+  if (o.success) {
+    return `<div class="modal-back celebrate"><div class="leaves" aria-hidden="true">${leaves()}</div>
+      <div class="modal win" role="dialog" aria-modal="true" aria-labelledby="out-title">
+        <div class="banner">Objective met</div>
+        <h1 id="out-title">The meadows are back</h1>
+        <p class="muted">Three years on, the clear-water state is holding. Here is what changed.</p>
+        ${surveyTable(game)}
+        ${letter(game)}
+        <button type="button" class="btn primary" data-action="outcome-close">Keep exploring the pond</button>
+      </div></div>`;
+  }
   const v = game.data.variables.get(game.mission.objective.variable)!;
   return `<div class="modal-back"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="out-title">
     <div class="label">Deadline reached</div>
-    <h1 id="out-title">${o.success ? 'The meadows are back' : 'The pond is still turbid'}</h1>
+    <h1 id="out-title">The pond is still turbid</h1>
     <p>Final survey: <span class="mono">${fmt(v, o.value)}${v.unit}</span> ${esc(v.name.toLowerCase())} against a target of <span class="mono">${fmt(v, o.target)}${v.unit}</span>.</p>
-    <p class="muted">${o.success ? 'The clear-water state is holding. Keep watching to see whether it lasts.' : 'You can keep running the pond to see what would have worked, but the mission is scored.'}</p>
+    ${surveyTable(game)}
+    <p class="muted">You can keep running the pond to see what would have worked, but the mission is scored.</p>
     <button type="button" class="btn primary" data-action="outcome-close">Keep exploring</button>
   </div></div>`;
 }

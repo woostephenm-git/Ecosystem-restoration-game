@@ -162,6 +162,7 @@ export function loadData(files: RawFiles): DataBundle {
       if (!interventions.has(i)) problems.push(`${where}: unknown intervention "${i}"`);
     });
     needVar(mission.objective.variable, `${where}.objective`);
+    mission.final_survey.forEach((id) => needVar(id, `${where}.final_survey`));
     mission.limiting_factors.factors.forEach((f) => needVar(f.variable, `${where}.limiting_factors.${f.id}`));
   }
 
