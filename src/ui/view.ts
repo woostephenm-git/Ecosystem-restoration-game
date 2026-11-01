@@ -113,8 +113,8 @@ export function modals(game: Game, ui: UiState): string {
 function tilePicker(game: Game, ui: UiState): string {
   const g = game.sim.grid;
   const t = g.tiles[g.indexOf(ui.tileId)];
-  const CW = 60;
-  const CH = 30;
+  const CW = 50;
+  const CH = 25;
   const W = 3 * CW;
   const H = 3 * CH;
   const DIRS: Record<string, string> = {
@@ -323,10 +323,18 @@ function methodsPanel(game: Game, ui: UiState): string {
       </button>`;
     })
     .join('');
-  return `<div class="panel-block">
+  return `<div class="panel-block compact">
     <div class="block-head"><span class="label">Sampling methods</span><span class="sub">Each method reveals specific variables. One budget pays for sampling and interventions.</span></div>
-    <div class="grid4">${buttons}</div>
+    <div class="pb-body"><div class="grid4">${buttons}</div>${infoBox('Point at a method to see what it reveals.')}</div>
   </div>`;
+}
+
+/**
+ * On a desktop the action buttons show only their name and cost; pointing at one (or tabbing
+ * to it) shows its description here. main.ts fills it. Narrow screens keep descriptions inline.
+ */
+function infoBox(placeholder: string): string {
+  return `<div class="action-info" aria-hidden="true" data-placeholder="${esc(placeholder)}"><p class="ai-empty">${esc(placeholder)}</p></div>`;
 }
 
 /** Interventions; tile-scoped ones act on every pond tile in `tiles`. */
@@ -352,10 +360,9 @@ export function interventionsPanel(game: Game, tiles: string[], selectionLabel?:
       </button>`;
     })
     .join('');
-  return `<div class="panel-block">
+  return `<div class="panel-block compact">
     <div class="block-head"><span class="label">Interventions</span><span class="sub">Act once you understand what limits the system. Order matters.</span></div>
-    <div class="grid4">${buttons}</div>
-    ${fundingButton(game)}
+    <div class="pb-body"><div class="pb-main"><div class="grid4">${buttons}</div>${fundingButton(game)}</div>${infoBox('Point at an intervention to see what it does.')}</div>
   </div>`;
 }
 

@@ -19,17 +19,23 @@ interface Node {
 function layout(game: Game): Node[] {
   const f = game.mission.funding!;
   const [target, ...rest] = game.fundingNodes();
-  // Sampled variables in two staggered columns on the left, the target on its own on the right.
-  // The stagger leaves gaps for arrows to pass between nodes.
-  const rows = Math.max(1, Math.ceil(rest.length / 2));
+  // Sampled variables scattered loosely on the left, the target on its own on the right. A
+  // fixed shuffle and uneven offsets keep them out of tidy columns, so nothing suggests which
+  // column holds the near factor and which the far one. Positions never change between visits.
+  const order = [...rest].sort((a, b) => hash(a) - hash(b));
   const h = boardHeight(rest.length);
-  const nodes: Node[] = rest.map((id, k) => ({
-    id,
-    name: game.data.variables.get(id)!.name,
-    x: k < rows ? 104 : 392,
-    y: PAD + ROW / 2 + (k % rows) * ROW + (k < rows ? 0 : ROW / 2),
-    target: false,
-  }));
+  const nodes: Node[] = order.map((id, k) => {
+    const row = Math.floor(k / 2);
+    const right = k % 2 === 1;
+    const wobble = (hash(id) % 1000) / 1000;
+    return {
+      id,
+      name: game.data.variables.get(id)!.name,
+      x: (right ? 330 : 100) + (row % 2 ? 70 : 0) + (wobble - 0.5) * 50,
+      y: PAD + ROW / 2 + row * ROW + (right ? ROW * 0.3 : 0) + (wobble - 0.5) * 10,
+      target: false,
+    };
+  });
   nodes.push({ id: target, name: f.target_name, x: 620, y: h / 2, target: true });
   return nodes;
 }
@@ -37,6 +43,13 @@ function layout(game: Game): Node[] {
 const ROW = 76;
 const PAD = 24;
 const boardHeight = (n: number) => Math.max(200, 2 * PAD + (Math.ceil(n / 2) + 0.5) * ROW);
+
+/** A stable number from a string, for a fixed shuffle. */
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return h >>> 0;
+}
 
 /** Where the line from `a` towards `b` leaves the edge of a's pill. */
 function edgePoint(a: Node, b: Node): [number, number] {
@@ -131,9 +144,11 @@ export function fundingModal(game: Game, ui: UiState): string {
       const label = !factor
         ? `${n.name} limits ${f.target_name.toLowerCase()}`
         : n.id === factor
-          ? `${n.name}: chosen as the limiting factor`
-          : `${n.name} drives ${name(factor).toLowerCase()}`;
-      return `<g class="fn-node ${role}" ${n.id === factor ? `role="img"` : `data-action="funding-node:${n.id}" role="button" tabindex="0" aria-pressed="${!!role}"`} aria-label="${esc(label)}">
+          ? `${n.name}: the limiting factor. Click again to remove both arrows.`
+          : n.id === cause
+            ? `${n.name}: drives ${name(factor).toLowerCase()}. Click again to remove this arrow.`
+            : `${n.name} drives ${name(factor).toLowerCase()}`;
+      return `<g class="fn-node ${role}" data-action="funding-node:${n.id}" role="button" tabindex="0" aria-pressed="${!!role}" aria-label="${esc(label)}">
         <rect x="${n.x - NODE_W / 2}" y="${n.y - NODE_H / 2}" width="${NODE_W}" height="${NODE_H}" rx="${NODE_H / 2}"/>
         <text x="${n.x}" y="${n.y + 4}" text-anchor="middle">${esc(n.name)}</text>
       </g>`;
@@ -150,7 +165,7 @@ export function fundingModal(game: Game, ui: UiState): string {
     ? `<strong>Step 1 of 2.</strong> Click what limits ${target}.`
     : !cause
       ? `<strong>Step 2 of 2.</strong> Click what drives ${esc(name(factor).toLowerCase())}.`
-      : `Both arrows are placed. Click another variable to change what drives ${esc(name(factor).toLowerCase())}, or remove the red arrow to start again.`;
+      : `Both arrows are placed. Click another variable to change what drives ${esc(name(factor).toLowerCase())}. Click a chosen variable again to remove its arrow.`;
   const markers = Object.entries(ARROW)
     .map(([k, c]) => `<marker id="fa-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="${k === 'yes' ? 6 : 8}" markerHeight="${k === 'yes' ? 6 : 8}" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="${c}"/></marker>`)
     .join('');

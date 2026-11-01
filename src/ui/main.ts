@@ -122,6 +122,7 @@ function draw() {
     if (canvasFocused) s.element.querySelector('canvas')!.focus();
   }
   if (focused) (root.querySelector(`[data-action="${CSS.escape(focused)}"]`) as HTMLElement | null)?.focus();
+  if (infoAction) showInfo(root.querySelector<HTMLElement>(`.panel-block.compact [data-action="${CSS.escape(infoAction)}"]`));
 }
 
 function setDrawer(open: boolean) {
@@ -219,9 +220,12 @@ root.addEventListener('click', (e) => {
     case 'funding-node': {
       // The first click places the red arrow (factor → target); later clicks set or change
       // the brown arrow (cause → factor).
+      // Clicking a chosen variable again removes its arrow (the red one takes the brown with it).
       const f = ui.funding;
       if (!f.factor) f.factor = arg;
-      else if (arg !== f.factor) f.cause = arg;
+      else if (arg === f.factor) f.factor = f.cause = null;
+      else if (arg === f.cause) f.cause = null;
+      else f.cause = arg;
       break;
     }
     case 'funding-remove':
@@ -277,6 +281,40 @@ root.addEventListener(
   },
   true,
 );
+
+// Description box beside the compact action buttons. The hovered or focused button is
+// remembered so the box survives the re-render on every sim tick.
+let infoAction: string | null = null;
+function showInfo(btn: HTMLElement | null) {
+  const block = btn?.closest('.panel-block');
+  const box = block?.querySelector<HTMLElement>('.action-info');
+  if (!btn || !box) return;
+  const name = btn.querySelector('.arow span')?.textContent ?? '';
+  const cost = btn.querySelector('.arow .mono')?.textContent ?? '';
+  const desc = btn.querySelector('.adesc')?.innerHTML ?? '';
+  const notes = [...btn.querySelectorAll('.anote')].map((n) => `<p class="ai-note">${n.innerHTML}</p>`).join('');
+  box.innerHTML = `<div class="ai-head"><span>${name}</span><span class="mono">${cost}</span></div><p class="ai-desc">${desc}</p>${notes}`;
+}
+function clearInfo(block: Element | null) {
+  const box = block?.querySelector<HTMLElement>('.action-info');
+  if (box) box.innerHTML = `<p class="ai-empty">${box.dataset.placeholder ?? ''}</p>`;
+}
+const onActionHover = (e: Event) => {
+  const btn = (e.target as Element).closest<HTMLElement>('.panel-block.compact .action');
+  if (!btn) return;
+  infoAction = btn.dataset.action ?? null;
+  showInfo(btn);
+};
+root.addEventListener('pointerover', onActionHover);
+root.addEventListener('focusin', onActionHover);
+root.addEventListener('pointerout', (e) => {
+  const from = (e.target as Element).closest('.panel-block.compact .grid4');
+  const to = (e as PointerEvent).relatedTarget as Element | null;
+  if (from && !from.contains(to)) {
+    infoAction = null;
+    clearInfo(from.closest('.panel-block'));
+  }
+});
 
 document.addEventListener('keydown', (e) => {
   const el = e.target as Element;

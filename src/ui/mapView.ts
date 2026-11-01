@@ -39,10 +39,10 @@ export function renderMap(game: Game, ui: UiState): string {
     <section class="left" aria-label="Pond map">
       <div id="stage-slot"></div>
       ${legend(game, ui)}
-      ${interventionsPanel(game, ui.selection, ui.selection.length > 1 ? `${ui.selection.length} selected tiles` : undefined)}
     </section>
     <aside class="right" aria-label="Pond overview">
       ${tilePanel(game, ui)}
+      ${interventionsPanel(game, ui.selection, ui.selection.length > 1 ? `${ui.selection.length} selected tiles` : undefined)}
     </aside>
   </main>
   ${modals(game, ui)}`;
