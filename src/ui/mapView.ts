@@ -158,6 +158,7 @@ export function mapViewState(game: Game, ui: UiState): MapViewState {
       ...map.outlets.map((b) => ({ tile: b.tile, face: b.face, name: b.name, kind: 'out' as const })),
     ],
     barrier: barrierState(game),
+    bales: game.mission.interventions.includes('barley_straw') ? game.sim.interventionProgress('barley_straw') : null,
     waterRise: waterRise(game),
     weir: weirState(game),
     overlay: ui.overlay,

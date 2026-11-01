@@ -58,6 +58,8 @@ export interface MapViewState {
   runoff: (number | null)[];
   boundaries: { tile: string; face: 'N' | 'E' | 'S' | 'W'; name: string; kind: 'in' | 'out' }[];
   barrier: 'none' | 'building' | 'built';
+  /** Barley straw bales afloat: how far through their 60 days (0 to 1), or null when there are none. */
+  bales: number | null;
   /** How far the pond surface sits above its original level, from gauged depths (m). */
   waterRise: number;
   /** The outlet weir: how far it has been raised (m) and whether work is under way. */
@@ -928,11 +930,12 @@ export class MapScene {
       const t = v.tiles[this.tileIndex.get(inlet.tile)!];
       const e = this.crossing(t, inlet.face);
       this.barrierMesh.position.set(e.x - this.HALF, this.WL, e.z - this.HALF);
-      this.barrierMesh.rotation.y = inlet.face === 'N' || inlet.face === 'S' ? Math.PI / 2 : 0;
+      this.barrierMesh.rotation.y = this.acrossChannel(e.x, e.z, inlet.face);
       this.barrierMesh.scale.setScalar(v.barrier === 'building' ? 0.6 : 1);
     }
 
     this.placeWeir(v);
+    this.placeBales(v);
 
     // Boundary labels, positioned every frame.
     const weirNote = v.weir.building
@@ -1010,12 +1013,98 @@ export class MapScene {
     const bed = this.H(e.x, e.z) - 0.04;
     const crest = this.baseWL + 0.02 + v.weir.raisedBy;
     w.group.position.set(e.x - this.HALF, bed, e.z - this.HALF);
-    w.group.rotation.y = { E: 0, W: Math.PI, N: Math.PI / 2, S: -Math.PI / 2 }[outlet.face];
+    w.group.rotation.y = this.acrossChannel(e.x, e.z, outlet.face);
     w.wall.scale.y = Math.max(0.05, crest - bed);
     w.spill.visible = !v.weir.building && this.WL >= crest - 0.03;
     w.spill.position.y = crest - bed;
     w.spill.scale.y = Math.max(0.05, crest - bed - 0.05);
     w.site.visible = v.weir.building;
+  }
+
+  /**
+   * Rotation that sets a structure square across the channel at (x, z): its local +x follows
+   * the channel out of the pond, so the wall or screen (along local z) spans the channel. Uses
+   * the channel's own path from the terrain; falls back to the tile face if no channel is near.
+   */
+  private acrossChannel(x: number, z: number, face: 'N' | 'E' | 'S' | 'W'): number {
+    let best = Infinity;
+    let dir: [number, number] | null = null;
+    for (const c of this.terrain.channels)
+      for (let i = 0; i < c.length - 1; i++) {
+        const [ax, az] = c[i];
+        const [bx, bz] = c[i + 1];
+        const dx = bx - ax, dz = bz - az;
+        const L2 = dx * dx + dz * dz || 1;
+        const u = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / L2));
+        const d = Math.hypot(x - (ax + u * dx), z - (az + u * dz));
+        if (d < best) {
+          best = d;
+          dir = [dx, dz];
+        }
+      }
+    const out = { E: [1, 0], W: [-1, 0], N: [0, -1], S: [0, 1] }[face];
+    if (!dir || best > 1.5) dir = [out[0], out[1]];
+    // Point local +x out of the pond, so the weir's spill falls on the downstream side.
+    if (dir[0] * out[0] + dir[1] * out[1] < 0) dir = [-dir[0], -dir[1]];
+    return Math.atan2(-dir[1], dir[0]);
+  }
+
+  /* ---------------- Barley straw bales ---------------- */
+  private bales: { group: THREE.Group; straw: THREE.MeshLambertMaterial; items: { obj: THREE.Group; x: number; z: number; yaw: number; phase: number }[] } | null = null;
+  private baleAge = 0;
+  private buildBales() {
+    const group = new THREE.Group();
+    const straw = new THREE.MeshLambertMaterial({ color: 0xd9b55c });
+    const twine = new THREE.MeshLambertMaterial({ color: 0x6b4f24 });
+    const body = new THREE.BoxGeometry(0.3, 0.13, 0.19);
+    const band = new THREE.BoxGeometry(0.025, 0.14, 0.2);
+    // Spread over the deepest open water, a couple of tiles apart, tethered in place.
+    const spots = this.pondTiles()
+      .map((t) => ({ x: t.col + 0.5, z: t.row + 0.5, d: this.WL - this.H(t.col + 0.5, t.row + 0.5) }))
+      .sort((a, b) => b.d - a.d);
+    const picked: { x: number; z: number }[] = [];
+    for (const s of spots) if (picked.length < 6 && picked.every((p) => Math.hypot(p.x - s.x, p.z - s.z) >= 2)) picked.push(s);
+    const items = picked.map((p, i) => {
+      const obj = new THREE.Group();
+      const m = new THREE.Mesh(body, straw);
+      m.castShadow = true;
+      obj.add(m);
+      for (const bx of [-0.08, 0.08]) {
+        const b = new THREE.Mesh(band, twine);
+        b.position.x = bx;
+        obj.add(b);
+      }
+      group.add(obj);
+      return { obj, x: p.x + (rand() - 0.5) * 0.3, z: p.z + (rand() - 0.5) * 0.3, yaw: rand() * Math.PI, phase: i * 1.7 };
+    });
+    this.scene.add(group);
+    return (this.bales = { group, straw, items });
+  }
+
+  private placeBales(v: MapViewState) {
+    if (v.bales === null) {
+      if (this.bales) this.bales.group.visible = false;
+      return;
+    }
+    const b = this.bales ?? this.buildBales();
+    b.group.visible = true;
+    this.baleAge = v.bales;
+    // Golden when fresh, brown and waterlogged by the end.
+    b.straw.color.setHex(0xd9b55c).lerp(new THREE.Color(0x7d6235), v.bales);
+  }
+
+  /** Bob on the ripples, swing on the tether, and sit lower in the water as the straw rots. */
+  private updateBales(t: number) {
+    const b = this.bales;
+    if (!b || !b.group.visible) return;
+    for (const it of b.items) {
+      const p = it.phase;
+      const swing = 0.12;
+      const x = it.x + swing * Math.sin(t * 0.35 + p);
+      const z = it.z + swing * Math.cos(t * 0.29 + p * 1.3);
+      it.obj.position.set(x - this.HALF, this.WL + 0.035 - 0.05 * this.baleAge + 0.016 * Math.sin(t * 1.9 + p), z - this.HALF);
+      it.obj.rotation.set(0.07 * Math.sin(t * 1.5 + p), it.yaw + 0.45 * Math.sin(t * 0.4 + p), 0.08 * Math.sin(t * 1.2 + p * 0.7));
+    }
   }
 
   private faceMid(t: TileView, face: 'N' | 'E' | 'S' | 'W') {
@@ -1289,6 +1378,7 @@ export class MapScene {
     this.time += step;
     this.shared.uTime.value = this.time;
     this.updateFish(step, this.time);
+    this.updateBales(this.time);
     this.updateSpecks(step);
     this.controls.update();
     const vd = new THREE.Vector3();
