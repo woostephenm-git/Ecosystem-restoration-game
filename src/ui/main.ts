@@ -1,8 +1,8 @@
 import { loadBrowserData } from '../data/browser';
 import { Game } from '../sim/game';
 import './styles.css';
-import { renderMap, sceneState } from './mapView';
-import { PondScene } from './scene/pondScene';
+import { MapScene } from './map3d/MapScene';
+import { mapViewState, renderMap } from './mapView';
 import { renderTile, type UiState } from './view';
 
 const MISSION = 'm01_clearwater_pond';
@@ -18,8 +18,12 @@ const TESTING_BUDGET = 100_000;
 const budgetParam = params.get('budget');
 const budget = budgetParam !== null ? Number(budgetParam) : import.meta.env.DEV ? TESTING_BUDGET : undefined;
 const game = new Game(data, MISSION, seed, { budget });
-const tiles = game.sim.grid.tiles;
-const centre = tiles.find((t) => t.row === Math.floor(game.sim.grid.rows / 2) && t.col === Math.floor(game.sim.grid.cols / 2)) ?? tiles[0];
+// Start on the pond tile nearest the middle of the map.
+const grid = game.sim.grid;
+const centre = grid
+  .waterTiles()
+  .slice()
+  .sort((a, b) => Math.hypot(a.row - grid.rows / 2, a.col - grid.cols / 2) - Math.hypot(b.row - grid.rows / 2, b.col - grid.cols / 2))[0];
 
 const ui: UiState = {
   screen: 'map',
@@ -27,12 +31,47 @@ const ui: UiState = {
   layer: 'all',
   selected: game.mission.objective.variable,
   overlay: 'surface',
+  selection: [centre.id],
   speed: 0,
   showBriefing: true,
   showOutcome: false,
 };
 
 const root = document.getElementById('app')!;
+
+// The 3D map keeps one WebGL canvas for the whole session; renders move it into place.
+let scene: MapScene | null = null;
+function mapScene(): MapScene {
+  if (scene) return scene;
+  const terrain = data.terrains.get(grid.map.terrain!)!;
+  scene = new MapScene(terrain, {
+    onSelect(ids, mode) {
+      if (mode === 'replace') {
+        const id = ids[0];
+        // First click selects a tile; clicking the selected pond tile again investigates it.
+        if (id === ui.tileId && game.isWater(id) && ui.selection.length <= 1) ui.screen = 'tile';
+        ui.tileId = id;
+        ui.selection = game.isWater(id) ? [id] : [];
+      } else {
+        const set = new Set(ui.selection);
+        const pond = ids.filter((id) => game.isWater(id));
+        // A single Shift-click toggles; a dragged area adds.
+        if (pond.length === 1 && set.has(pond[0])) set.delete(pond[0]);
+        else pond.forEach((id) => set.add(id));
+        ui.selection = [...set];
+        if (ids.length) ui.tileId = ids[ids.length - 1];
+      }
+      draw();
+    },
+    onOpen(id) {
+      if (!game.isWater(id)) return;
+      ui.tileId = id;
+      ui.screen = 'tile';
+      draw();
+    },
+  });
+  return scene;
+}
 
 // Re-rendering replaces every element. If that happens between pointerdown and pointerup,
 // the browser drops the click (that is what made Pause unreliable while time was running).
@@ -62,36 +101,17 @@ function draw() {
   // Keep focus on the same control across re-renders so keyboard play works.
   const focused = (document.activeElement as HTMLElement | null)?.dataset?.action;
   const scroll = root.querySelector('.xsec-scroll')?.scrollLeft ?? 0;
-  root.innerHTML = ui.screen === 'map' ? renderMap(game, ui, use3d) : renderTile(game, ui);
-  if (ui.screen === 'map' && use3d) mountScene();
+  const canvasFocused = !!scene && scene.element.contains(document.activeElement);
+  root.innerHTML = ui.screen === 'map' ? renderMap(game, ui) : renderTile(game, ui);
   const xs = root.querySelector('.xsec-scroll');
   if (xs) xs.scrollLeft = scroll;
+  if (ui.screen === 'map') {
+    const s = mapScene();
+    root.querySelector('#stage-slot')?.replaceWith(s.element);
+    s.update(mapViewState(game, ui));
+    if (canvasFocused) s.element.querySelector('canvas')!.focus();
+  }
   if (focused) (root.querySelector(`[data-action="${CSS.escape(focused)}"]`) as HTMLElement | null)?.focus();
-}
-
-// The 3D map persists across redraws: its element is moved into the fresh slot each time,
-// so the WebGL context, camera and animation state survive. ?map=2d forces the SVG map.
-const use3d = params.get('map') !== '2d' && PondScene.supported();
-let scene: PondScene | null = null;
-function mountScene() {
-  const slot = root.querySelector('#map-slot');
-  if (!slot) return;
-  const state = sceneState(game, ui);
-  if (!scene) scene = new PondScene(state, game.sim.grid.rows, game.sim.grid.cols, onMapTile);
-  slot.appendChild(scene.element);
-  scene.update(state);
-  scene.start();
-}
-
-/** First click on a map tile selects it; clicking the selected tile opens it. */
-function selectTile(id: string) {
-  if (ui.tileId === id) ui.screen = 'tile';
-  ui.tileId = id;
-}
-
-function onMapTile(id: string) {
-  selectTile(id);
-  draw();
 }
 
 /** Light theme on the map, ochre in the investigation view. */
@@ -119,15 +139,13 @@ root.addEventListener('click', (e) => {
     case 'overlay':
       ui.overlay = arg;
       break;
-    case 'tile':
-      selectTile(arg);
-      break;
     case 'open-tile':
       ui.tileId = arg;
       ui.screen = 'tile';
       break;
     case 'back-to-map':
       ui.screen = 'map';
+      if (game.isWater(ui.tileId) && !ui.selection.includes(ui.tileId)) ui.selection = [ui.tileId];
       break;
     case 'inspect-boundary':
       // Boundary inputs are shown on the inflow face of the inlet tile.
@@ -142,7 +160,8 @@ root.addEventListener('click', (e) => {
       if (game.sample(arg, ui.tileId)) ui.selected = data.methods.get(arg)!.reveals[0];
       break;
     case 'intervene':
-      game.intervene(arg, ui.tileId);
+      // On the map, tile-scoped interventions act on the whole selection.
+      game.interveneOn(arg, ui.screen === 'map' ? ui.selection : [ui.tileId]);
       break;
     case 'speed':
       ui.speed = Number(arg) as UiState['speed'];
@@ -162,13 +181,7 @@ root.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  // SVG map tiles are not buttons, so give them button keyboard behaviour.
   const el = e.target as Element;
-  if ((e.key === 'Enter' || e.key === ' ') && el instanceof SVGElement && el.dataset.action) {
-    e.preventDefault();
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    return;
-  }
   if (e.key === 'Backspace' && ui.screen === 'tile' && !(el instanceof HTMLInputElement)) {
     ui.screen = 'map';
     draw();

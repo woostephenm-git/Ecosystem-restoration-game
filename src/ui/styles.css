@@ -1242,16 +1242,14 @@ button:focus-visible {
   min-height: 60px;
 }
 
-/* 3D map stage (from the Marsh Specimen Bench artifact). Dark in every theme: it is a viewport. */
-.mapwrap.is3d {
-  background: #11171e;
-  border-color: #2b3745;
-}
+/* 3D map stage */
 .stage3d {
   position: relative;
-  height: clamp(420px, 64vh, 700px);
-  color: #dfe6ec;
-  font-family: var(--sans);
+  height: clamp(420px, 64vh, 680px);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--map-bg-1);
 }
 .stage3d canvas {
   display: block;
@@ -1259,102 +1257,102 @@ button:focus-visible {
   height: 100%;
   touch-action: none;
 }
-.s-labels {
+.stage3d canvas:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: -3px;
+}
+.stage3d .hud {
   position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-.s-tile,
-.s-bnd {
-  position: absolute;
-  left: 0;
-  top: 0;
-  will-change: transform;
-}
-.s-tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  font-family: var(--mono);
-  text-shadow: 0 1px 2px #000, 0 0 6px rgba(0, 0, 0, 0.8);
-}
-.s-tile b {
-  font: 600 12px var(--sans);
-  color: #ffffff;
-  opacity: 0.85;
-}
-.s-tile.sel b {
-  opacity: 1;
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-.s-tile span {
-  font-size: 12.5px;
-  color: #ffffff;
-}
-.s-bnd {
-  background: color-mix(in oklab, #18202a 88%, transparent);
-  border: 1px solid #2b3745;
+  top: 10px;
+  left: 10px;
+  max-width: calc(100% - 220px);
+  padding: 7px 10px;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 6px 9px;
-  font: 11px/1.45 var(--mono);
-  color: #b9c4cd;
-  white-space: nowrap;
-}
-.s-bnd .t {
-  font: 600 12px var(--sans);
-  color: #dfe6ec;
-  margin-bottom: 2px;
-}
-.s-hud {
-  position: absolute;
-  top: 12px;
-  left: 12px;
-  background: color-mix(in oklab, #18202a 88%, transparent);
-  border: 1px solid #2b3745;
-  border-radius: 6px;
-  padding: 8px 10px;
+  background: color-mix(in oklab, var(--panel) 90%, transparent);
   pointer-events: none;
-  max-width: calc(100% - 24px);
 }
-.s-hud-tile {
-  font: 500 13px var(--mono);
+.hud-tile {
+  font: 600 13px var(--sans);
 }
-.s-hud-info {
-  font: 11.5px var(--mono);
-  color: #8a98a6;
+.hud-info {
   margin-top: 2px;
+  font: 11.5px var(--mono);
+  color: var(--muted);
 }
-.s-hint {
+.map-hint {
   position: absolute;
-  bottom: 10px;
   left: 12px;
+  bottom: 10px;
   right: 90px;
   font-size: 11.5px;
-  color: #8a98a6;
+  color: var(--muted);
   pointer-events: none;
 }
-.s-compass {
+.map-tools {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+}
+.btn.small {
+  height: 32px;
+  padding: 0 10px;
+  font-size: 12px;
+  background: var(--panel);
+}
+.stage3d .compass {
   position: absolute;
   right: 12px;
   bottom: 12px;
   width: 64px;
   height: 64px;
   pointer-events: none;
-  opacity: 0.85;
 }
-.s-compass svg {
+.stage3d .compass svg {
   width: 100%;
   height: 100%;
   overflow: visible;
 }
-.s-compass text {
+.stage3d .compass text {
   font: 600 10px var(--mono);
-  fill: #8a98a6;
+  fill: var(--muted);
   text-anchor: middle;
   dominant-baseline: central;
 }
-.s-compass text.n {
-  fill: #dfe6ec;
+.stage3d .compass text.n {
+  fill: var(--text);
+}
+.map-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.map-label {
+  position: absolute;
+  transform: translate(-50%, -130%);
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: color-mix(in oklab, var(--label-bg) 92%, transparent);
+  font: 600 11.5px var(--sans);
+  white-space: nowrap;
+  color: var(--text);
+}
+.map-label span {
+  display: block;
+  font-weight: 400;
+  color: var(--warn-text);
+}
+.switcher {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 3px;
+}
+.switcher .tilebtn {
+  width: auto;
+  min-width: 52px;
+  padding: 0 6px;
 }

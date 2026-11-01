@@ -1,6 +1,6 @@
 // Mission-level game state: budget, sampling, interventions, knowledge, objective.
 // Still headless: the UI reads from and calls into this, never into the engine directly.
-import { Simulation } from './engine';
+import { Simulation, type SimSnapshot } from './engine';
 import { fmtMoney, fmtRange, fmtUnit } from './format';
 import { applyTransform, evalLink } from './functions';
 import { Knowledge, bounds, type Known } from './knowledge';
@@ -44,6 +44,23 @@ export interface Availability {
   reason?: string;
 }
 
+// Spin-up brings the degraded pond to its own equilibrium before the mission clock starts.
+// It does not depend on the player's seed, so it runs once per mission and is reused.
+const SPINUP_SEED = 0;
+const spinupCache = new WeakMap<DataBundle, Map<string, SimSnapshot>>();
+function spunUp(data: DataBundle, mission: Mission): SimSnapshot {
+  let byMission = spinupCache.get(data);
+  if (!byMission) spinupCache.set(data, (byMission = new Map()));
+  let snap = byMission.get(mission.id);
+  if (!snap) {
+    const sim = new Simulation(data, mission, SPINUP_SEED);
+    sim.step(mission.spinup_days);
+    snap = sim.snapshot();
+    byMission.set(mission.id, snap);
+  }
+  return snap;
+}
+
 export class Game {
   readonly sim: Simulation;
   readonly mission: Mission;
@@ -69,7 +86,7 @@ export class Game {
     this.mission = mission;
     this.budget = options.budget ?? mission.budget;
     this.sim = new Simulation(data, mission, seed);
-    this.sim.step(mission.spinup_days);
+    this.sim.restore(spunUp(data, mission));
     this.knowledge = new Knowledge(this.sim, mission.measurement_fresh_days, new Rng(seed).fork(2));
     this.startSurvey = this.survey();
   }
@@ -159,6 +176,38 @@ export class Game {
     const where = iv.scope === 'tile' ? ` on ${tileId}` : '';
     this.log.push({ day: this.day, kind: 'intervention', text: `${iv.name}${where} started (${fmtMoney(iv.cost)}, ${iv.duration_days} days)` });
     return true;
+  }
+
+  isWater(tileId: string): boolean {
+    return this.sim.grid.tiles[this.sim.grid.indexOf(tileId)].water;
+  }
+
+  /**
+   * Tiles a tile-scoped intervention would act on: the pond tiles in `tileIds` where it is not
+   * already running. Water-body interventions act once, whatever the selection.
+   */
+  targetsFor(interventionId: string, tileIds: string[]): string[] {
+    const iv = this.data.interventions.get(interventionId)!;
+    if (iv.scope !== 'tile') return tileIds.slice(0, 1);
+    return tileIds.filter((t) => this.isWater(t) && !this.sim.activeInterventions(t).includes(interventionId));
+  }
+
+  /** Can the intervention start on these tiles together (one budget check for the lot)? */
+  canInterveneOn(interventionId: string, tileIds: string[]): Availability {
+    const iv = this.data.interventions.get(interventionId)!;
+    if (iv.scope !== 'tile') return this.canIntervene(interventionId, tileIds[0]);
+    const pond = tileIds.filter((t) => this.isWater(t));
+    if (!pond.length) return { ok: false, reason: 'Select pond tiles' };
+    const targets = this.targetsFor(interventionId, pond);
+    if (!targets.length) return { ok: false, reason: 'In progress' };
+    if (iv.cost * targets.length > this.budget) return { ok: false, reason: 'Not enough budget' };
+    return { ok: true };
+  }
+
+  /** Start on every target tile; returns how many started. */
+  interveneOn(interventionId: string, tileIds: string[]): number {
+    if (!this.canInterveneOn(interventionId, tileIds).ok) return 0;
+    return this.targetsFor(interventionId, tileIds).filter((t) => this.intervene(interventionId, t)).length;
   }
 
   advance(days: number) {
@@ -265,6 +314,7 @@ export class Game {
   /** Evaluate a mission condition against what the player knows (never true state). */
   check(tileId: string, c: Condition): boolean {
     if ('known' in c) return this.knowledge.isKnown(tileId, c.var) === c.known;
+    if ('measured' in c) return (this.known(tileId, c.var).state === 'measured') === c.measured;
     if ('done' in c) return this.timesDone(c.intervention) > 0 === c.done;
     if ('days_since_intervention' in c) {
       const last = this.lastDone(c.days_since_intervention);

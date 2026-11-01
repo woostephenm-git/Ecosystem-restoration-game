@@ -53,7 +53,7 @@
     "from": ["light_bed"],
     "to": "plant_cover",
     "function": "threshold",
-    "params": { "k": 0.0005, "at": 8, "width": 2, "direction": "above" },
+    "params": { "k": 5e-05, "at": 8, "width": 2, "direction": "above" },
     "label": "Seed bank sprouts in good light",
     "strength": "weak",
     "discovered_by": ["light_bed"]
@@ -63,7 +63,7 @@
     "from": ["plant_fragments", "light_bed"],
     "to": "plant_cover",
     "function": "product",
-    "params": { "k": 0.002 },
+    "params": { "k": 1 },
     "factors": [
       { "var": "plant_fragments", "shape": "identity" },
       { "var": "light_bed", "shape": "threshold", "at": 8, "width": 2, "direction": "above" }

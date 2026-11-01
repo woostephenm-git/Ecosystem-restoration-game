@@ -19,10 +19,10 @@ describe('budget override', () => {
 describe('final survey', () => {
   it('records pond-wide means at the start and at the deadline', () => {
     const g = new Game(data, MISSION, 1);
-    g.intervene('carp_removal', 'B1');
-    g.intervene('carp_barrier', 'B1');
+    g.intervene('carp_removal', 'G7');
+    g.intervene('carp_barrier', 'G7');
     g.advance(40);
-    for (const t of ['A1', 'A3', 'C3']) g.intervene('plant_submerged', t);
+    for (const t of ['D7', 'E8', 'G9', 'H9', 'J7', 'K8']) g.intervene('plant_submerged', t);
     g.advance(g.deadlineDay - g.day);
     const o = g.outcome!;
     expect(o.success).toBe(true);
@@ -46,20 +46,20 @@ describe('gauges', () => {
   const measured = (value: number) => ({ state: 'measured' as const, value, day: 0, source: '' });
 
   it('places values on linear and log scales', () => {
-    expect(scalePos(v('carp'), 300)).toBeCloseTo(0.5);
+    expect(scalePos(v('carp'), 400)).toBeCloseTo(0.5);
     expect(scalePos(v('light_bed'), 1)).toBeCloseTo(1 / 3);
     expect(scalePos(v('carp'), 5000)).toBe(1);
   });
 
   it('reads low, mid and high by thirds', () => {
     expect(level(v('carp'), measured(50))).toBe('low');
-    expect(level(v('carp'), measured(300))).toBe('mid');
-    expect(level(v('carp'), measured(500))).toBe('high');
+    expect(level(v('carp'), measured(400))).toBe('mid');
+    expect(level(v('carp'), measured(700))).toBe('high');
     expect(level(v('carp'), { state: 'unknown' })).toBeNull();
   });
 
   it('gives no single level when an estimate spans thirds', () => {
-    expect(level(v('carp'), { state: 'estimate', lo: 50, hi: 500, day: 0, source: '' })).toBeNull();
+    expect(level(v('carp'), { state: 'estimate', lo: 50, hi: 700, day: 0, source: '' })).toBeNull();
   });
 
   it('every variable has a scale whose range covers its starting state', () => {

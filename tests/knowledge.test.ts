@@ -4,14 +4,16 @@ import { Game } from '../src/sim/game';
 
 const data = loadNodeData();
 const MISSION = 'm01_clearwater_pond';
-const TILE = 'B2';
+const TILE = 'G7';
+const INLET = data.maps.get(data.missions.get(MISSION)!.map)!.inlets[0].tile;
 const newGame = () => new Game(data, MISSION, 1);
 const status = (g: Game, id: string) => g.limitingFactors(TILE).find((f) => f.id === id)!.status;
 
 describe('knowledge model', () => {
   it('starts with the designed knowledge states', () => {
     const g = newGame();
-    expect(g.known(TILE, 'carp').state).toBe('unknown');
+    // Carp show only as ripples and mud plumes until surveyed: a coarse estimate.
+    expect(g.known(TILE, 'carp').state).toBe('estimate');
     expect(g.known(TILE, 'water_depth').state).toBe('measured');
     expect(g.known(TILE, 'nitrate').state).toBe('estimate');
     // Secchi is coarsely visible as murky water.
@@ -54,7 +56,8 @@ describe('knowledge model', () => {
     g.sample('fish_survey', TILE);
     const k0 = g.known(TILE, 'carp');
     g.intervene('carp_removal', TILE);
-    g.advance(40);
+    // Within the freshness window, so the survey still stands in for the visual estimate.
+    g.advance(20);
     const k1 = g.known(TILE, 'carp');
     expect(k1).toEqual(k0);
     expect(g.sim.tile(TILE).values.carp).toBeLessThan((k0 as { value: number }).value / 2);
@@ -79,7 +82,7 @@ describe('knowledge model', () => {
 
   it('limiting factors follow knowledge, not true state', () => {
     const g = newGame();
-    expect(status(g, 'carp')).toBe('SUSPECTED');
+    expect(status(g, 'carp')).toBe('LIKELY');
     expect(status(g, 'nutrients')).toBe('UNKNOWN');
     g.sample('secchi_disk', TILE);
     expect(status(g, 'light')).toBe('LIMITING');
@@ -108,34 +111,40 @@ describe('knowledge model', () => {
   it('a water grab sample covers only its own tile', () => {
     const g = newGame();
     g.sample('water_grab', TILE);
-    expect(g.known('A1', 'total_p').state).toBe('unknown');
+    expect(g.known('D7', 'total_p').state).toBe('unknown');
   });
 
   it('what flows in is known once its sources are known', () => {
     const g = newGame();
-    // B1 is fed by the inlet (measured by regional monitoring) and mixes with A1, B2 and C1.
-    expect(g.known('B1', 'incoming_tp').state).toBe('unknown');
-    for (const t of ['A1', 'B2', 'C1']) g.sample('water_grab', t);
-    const k = g.known('B1', 'incoming_tp');
+    // The inlet tile is fed by the stream (measured by regional monitoring) and mixes with its neighbours.
+    const g2 = g.sim.grid;
+    const neighbours = g2.neighbours4[g2.indexOf(INLET)].map((i) => g2.tiles[i].id);
+    expect(g.known(INLET, 'incoming_tp').state).toBe('unknown');
+    for (const t of neighbours) g.sample('water_grab', t);
+    const k = g.known(INLET, 'incoming_tp');
     expect(k.state).toBe('measured');
-    if (k.state === 'measured') expect(k.value).toBeCloseTo(g.sim.tile('B1').values.incoming_tp, 0);
+    if (k.state === 'measured') expect(k.value).toBeCloseTo(g.sim.tile(INLET).values.incoming_tp, 0);
   });
 
   it('carp arriving at the inlet stays unknown until upstream immigration is measured', () => {
     const g = newGame();
     g.sample('fish_survey', TILE);
-    expect(g.known('B2', 'carp_moving_in').state).toBe('measured');
-    expect(g.known('B1', 'carp_moving_in').state).toBe('unknown');
+    expect(g.known(TILE, 'carp_moving_in').state).toBe('measured');
+    expect(g.known(INLET, 'carp_moving_in').state).toBe('unknown');
     g.sample('inflow_fish_trap', TILE);
-    expect(g.known('B1', 'carp_moving_in').state).toBe('measured');
+    expect(g.known(INLET, 'carp_moving_in').state).toBe('measured');
   });
 
   it('limiting factors differ between tiles: the shallows have light, the centre does not', () => {
     const g = newGame();
-    g.sample('secchi_disk', 'A1');
-    g.sample('secchi_disk', 'B2');
-    expect(g.limitingFactors('A1').find((f) => f.id === 'light')!.status).toBe('NOT LIMITING');
-    expect(g.limitingFactors('B2').find((f) => f.id === 'light')!.status).toBe('LIMITING');
+    g.sample('secchi_disk', 'D7');
+    g.sample('secchi_disk', 'G7');
+    expect(g.limitingFactors('D7').find((f) => f.id === 'light')!.status).toBe('NOT LIMITING');
+    expect(g.limitingFactors('G7').find((f) => f.id === 'light')!.status).toBe('LIMITING');
+  });
+
+  it('land tiles have no pond knowledge', () => {
+    expect(newGame().known('A1', 'secchi').state).toBe('unknown');
   });
 
   it('evaluates the objective at the deadline', () => {

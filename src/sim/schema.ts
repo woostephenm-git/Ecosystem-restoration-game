@@ -30,12 +30,16 @@ const LateralSchema = z.discriminatedUnion('process', [
   z.object({ process: z.literal('water_exchange'), discharge: id }),
   /** Mean concentration of the water arriving: from upstream tiles, the inlet (`boundary`), and mixing. */
   z.object({ process: z.literal('incoming_concentration'), of: id, boundary: id.optional(), discharge: id }),
+  /**
+   * Movement between neighbouring tiles is given as a diffusivity in m²/day, so the
+   * per-tile rate (diffusivity / tile area) stays physical when the tile size changes.
+   */
   /** Organisms arriving per day from neighbouring tiles, plus `boundary` immigration at inlet tiles. */
-  z.object({ process: z.literal('dispersal_in'), of: id, rate: z.number().min(0), boundary: id.optional() }),
-  /** `scale` times the number of neighbouring water tiles. */
-  z.object({ process: z.literal('neighbour_count'), scale: z.number() }),
-  /** Mean of a variable over neighbouring water tiles. */
-  z.object({ process: z.literal('neighbour_mean'), of: id }),
+  z.object({ process: z.literal('dispersal_in'), of: id, diffusivity_m2_per_day: z.number().min(0), boundary: id.optional() }),
+  /** Diffusivity / tile area, times the number of neighbouring water tiles: the per-day leaving rate. */
+  z.object({ process: z.literal('neighbour_count'), diffusivity_m2_per_day: z.number().min(0) }),
+  /** Sum over neighbouring water tiles of diffusivity / tile area times the variable. */
+  z.object({ process: z.literal('neighbour_sum'), of: id, diffusivity_m2_per_day: z.number().min(0) }),
 ]);
 
 export const VariableSchema = z
@@ -159,7 +163,14 @@ export const MapSchema = z.object({
   cols: z.number().int().positive(),
   tile_size_m: z.number().positive(),
   /** Exchange between neighbouring water tiles, per day, as a fraction of volume. */
-  mixing_per_day: z.number().min(0),
+  /** Path, relative to data/, of the renderer's heightfield. The sim never reads it. */
+  terrain: z.string().optional(),
+  /** Water surface elevation, in the same datum as bed_elevation. */
+  water_level: z.number(),
+  /** Mixing between neighbouring water tiles. Per-tile exchange = this / tile area. */
+  mixing_m2_per_day: z.number().min(0),
+  /** Water bodies. Only simulated bodies' tiles run the sim; the rest are scenery. */
+  bodies: z.array(z.object({ id, name: z.string(), simulated: z.boolean() })).min(1),
   /** Initial stock values shared by every tile; a tile's own `initial` overrides them. */
   defaults: z.record(z.string(), z.number()),
   tiles: z
@@ -169,6 +180,8 @@ export const MapSchema = z.object({
         row: z.number().int().min(0),
         col: z.number().int().min(0),
         description: z.string(),
+        /** Water body this tile belongs to; absent on land. */
+        body: id.optional(),
         initial: z.record(z.string(), z.number()),
       }),
     )
@@ -179,6 +192,8 @@ export const MapSchema = z.object({
 
 const ConditionSchema = z.union([
   z.object({ var: id, known: z.boolean() }),
+  /** Measured, as opposed to estimated or unknown. */
+  z.object({ var: id, measured: z.boolean() }),
   z.object({ var: id, op: z.enum(['<', '>']), value: z.number() }),
   z.object({ var: id, op: z.enum(['<', '>']), ratio_of: id, factor: z.number() }),
   z.object({ intervention: id, done: z.boolean() }),
@@ -258,3 +273,19 @@ export type GameMap = z.infer<typeof MapSchema>;
 export type Mission = z.infer<typeof MissionSchema>;
 export type Condition = z.infer<typeof ConditionSchema>;
 export type LimitingFactorDef = Mission['limiting_factors']['factors'][number];
+
+/** Fine heightfield for the 3D map: (size × resolution + 1)² samples, row-major from `origin`. */
+export const TerrainSchema = z
+  .object({
+    id,
+    origin: z.number(),
+    size: z.number().positive(),
+    resolution: z.number().int().positive(),
+    playable: z.number().int().positive(),
+    water_level: z.number(),
+    channels: z.array(z.array(z.tuple([z.number(), z.number()]))),
+    heights: z.array(z.number()),
+  })
+  .refine((t) => t.heights.length === (t.size * t.resolution + 1) ** 2, 'heights must hold (size × resolution + 1)² samples');
+
+export type Terrain = z.infer<typeof TerrainSchema>;

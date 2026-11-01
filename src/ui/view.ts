@@ -14,8 +14,10 @@ export interface UiState {
   tileId: string;
   layer: string;
   selected: string;
-  /** Map overlay: 'surface' for the observable view, or a variable id. */
+  /** Map overlay: 'surface' for the observable view, 'flow', or a variable id. */
   overlay: string;
+  /** Pond tiles selected on the map; tile-scoped interventions act on all of them. */
+  selection: string[];
   speed: 0 | 1 | 4;
   showBriefing: boolean;
   showOutcome: boolean;
@@ -77,7 +79,7 @@ export function renderTile(game: Game, ui: UiState): string {
       ${chips(game, ui)}
       <div class="xsec-scroll">${crossSection(game, ui)}</div>
       ${methodsPanel(game, ui)}
-      ${interventionsPanel(game, ui.tileId)}
+      ${interventionsPanel(game, [ui.tileId])}
     </section>
     <aside class="right" aria-label="Analysis">
       ${objectivePanel(game)}
@@ -94,17 +96,25 @@ export function modals(game: Game, ui: UiState): string {
 }
 
 /** A small clickable copy of the grid, for jumping between tiles in the investigation view. */
+/** Step to a neighbouring pond tile without going back to the map. */
 function tileSwitcher(game: Game, ui: UiState): string {
   const g = game.sim.grid;
-  const cells = g.tiles
-    .slice()
-    .sort((a, b) => a.row - b.row || a.col - b.col)
-    .map(
-      (t) =>
-        `<button type="button" class="tilebtn ${t.id === ui.tileId ? 'on' : ''}" data-action="open-tile:${t.id}" aria-label="Tile ${t.id}, ${esc(t.description)}" aria-pressed="${t.id === ui.tileId}" style="grid-row:${t.row + 1};grid-column:${t.col + 1}">${t.id}</button>`,
-    )
+  const t = g.tiles[g.indexOf(ui.tileId)];
+  const dirs: [string, string, number, number][] = [
+    ['north', '↑', -1, 0],
+    ['west', '←', 0, -1],
+    ['east', '→', 0, 1],
+    ['south', '↓', 1, 0],
+  ];
+  const cells = dirs
+    .map(([name, glyph, dr, dc]) => {
+      const n = g.at(t.row + dr, t.col + dc);
+      const ok = n?.water;
+      const label = ok ? `Go ${name} to tile ${n!.id}` : `No pond tile to the ${name}`;
+      return `<button type="button" class="tilebtn nav-${name}" ${ok ? `data-action="open-tile:${n!.id}"` : 'disabled'} aria-label="${label}" title="${label}">${ok ? `${glyph} ${n!.id}` : glyph}</button>`;
+    })
     .join('');
-  return `<div class="switcher" role="group" aria-label="Switch tile" style="grid-template-columns:repeat(${g.cols}, 30px)">${cells}</div>`;
+  return `<div class="switcher" role="group" aria-label="Neighbouring tiles">${cells}</div>`;
 }
 
 export function header(game: Game, ui: UiState): string {
@@ -239,20 +249,24 @@ function methodsPanel(game: Game, ui: UiState): string {
   </div>`;
 }
 
-/** Interventions; tile-scoped ones act on `tileId`. */
-export function interventionsPanel(game: Game, tileId: string): string {
+/** Interventions; tile-scoped ones act on every pond tile in `tiles`. */
+export function interventionsPanel(game: Game, tiles: string[], selectionLabel?: string): string {
+  const pond = tiles.filter((t) => game.isWater(t));
   const buttons = game
     .interventions()
     .map((iv) => {
       const onTile = iv.scope === 'tile';
-      const can = game.canIntervene(iv.id, tileId);
-      const times = game.timesDone(iv.id, onTile ? tileId : undefined);
-      const running = game.sim.activeInterventions(onTile ? tileId : undefined).includes(iv.id);
-      const status = running ? 'In progress' : !iv.repeatable && times ? 'In place' : times ? `Done ${times}×${onTile ? ` on ${tileId}` : ''}` : '';
-      const name = onTile ? `${iv.name} on ${tileId}` : iv.name;
+      const can = game.canInterveneOn(iv.id, tiles);
+      const targets = onTile ? game.targetsFor(iv.id, pond).length : 1;
+      const where = onTile ? (selectionLabel ?? (pond.length === 1 ? pond[0] : `${pond.length} tiles`)) : '';
+      const times = onTile ? pond.reduce((s, t) => s + game.timesDone(iv.id, t), 0) : game.timesDone(iv.id);
+      const running = onTile ? pond.some((t) => game.sim.activeInterventions(t).includes(iv.id)) : game.sim.activeInterventions().includes(iv.id);
+      const status = running ? 'In progress' : !iv.repeatable && times ? 'In place' : times ? `Done ${times}×${onTile && pond.length === 1 ? ` on ${pond[0]}` : ''}` : '';
+      const name = onTile ? (pond.length ? `${iv.name} on ${where}` : `${iv.name} (select pond tiles)`) : iv.name;
+      const cost = iv.cost * Math.max(1, targets);
       return `<button type="button" class="action iv ${running ? 'running' : ''}" data-action="intervene:${iv.id}" ${can.ok ? '' : 'disabled'}>
-        <span class="arow"><span>${esc(name)}</span><span class="mono">${fmtMoney(iv.cost)}</span></span>
-        <span class="adesc">${esc(iv.description)} ${onTile ? 'One tile.' : 'Whole pond.'} Takes ${iv.duration_days} days.</span>
+        <span class="arow"><span>${esc(name)}</span><span class="mono">${fmtMoney(cost)}</span></span>
+        <span class="adesc">${esc(iv.description)} ${onTile ? `${fmtMoney(iv.cost)} per tile.` : 'Whole pond.'} Takes ${iv.duration_days} days.</span>
         ${status ? `<span class="anote">${status}</span>` : ''}
         ${!can.ok && can.reason === 'Not enough budget' ? '<span class="anote">Not enough budget</span>' : ''}
       </button>`;

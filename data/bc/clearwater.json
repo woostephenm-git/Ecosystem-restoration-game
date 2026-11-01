@@ -1,11 +1,11 @@
 {
   "id": "clearwater",
   "values": {
-    "inflow_discharge": { "type": "constant", "value": 500 },
+    "inflow_discharge": { "type": "constant", "value": 230 },
     "inflow_tp": { "type": "constant", "value": 50 },
     "inflow_no3": { "type": "constant", "value": 2.5 },
     "inflow_ss": { "type": "constant", "value": 15 },
-    "carp_immigration": { "type": "constant", "value": 0.6 },
+    "carp_immigration": { "type": "constant", "value": 1.0 },
     "wind": {
       "type": "seasonal",
       "mean": 5,

@@ -25,7 +25,8 @@ export class Knowledge {
     private readonly freshDays: number,
     rng: Rng,
   ) {
-    for (const tile of sim.tiles) {
+    // Only simulated water tiles have state to know about; land is scenery in Mission 1.
+    for (const tile of sim.grid.waterTiles().map((t) => sim.tiles[t.index])) {
       const map = new Map<string, Record_>();
       this.tiles.set(tile.id, map);
       for (const v of sim.data.variables.values()) {
@@ -60,7 +61,7 @@ export class Knowledge {
   /** Free visual observation and gauges. Runs after every simulated day. */
   observe() {
     const today = this.sim.missionDay;
-    for (const tile of this.sim.tiles) {
+    for (const tile of this.sim.grid.waterTiles().map((t) => this.sim.tiles[t.index])) {
       for (const v of this.sim.data.variables.values()) {
         if (v.observable === 'full') {
           this.record(tile, v, v.observe_source ?? 'Visual observation');
@@ -76,6 +77,7 @@ export class Knowledge {
   }
 
   get(tileId: string, variableId: string): Known {
+    if (!this.tiles.has(tileId)) return { state: 'unknown' };
     const v = this.sim.data.variables.get(variableId)!;
     if (v.inferred_from) return this.infer(tileId, v);
     if (v.kind === 'lateral') return this.lateral(tileId, v);

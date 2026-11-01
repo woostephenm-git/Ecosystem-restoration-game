@@ -5,7 +5,7 @@
   "map": "maps/clearwater_pond.json",
   "boundary_conditions": "bc/clearwater.json",
   "layers_enabled": ["hydrology", "chemistry", "soil", "flora", "fauna"],
-  "budget": 7000,
+  "budget": 8000,
   "start": {
     "year": 1,
     "day_of_year": 91
@@ -13,10 +13,10 @@
   "spinup_days": 1460,
   "objective": {
     "variable": "plant_cover",
-    "target": 30,
+    "target": 50,
     "aggregate": "mean_over_water",
     "deadline_years": 3,
-    "text": "Reach 30% submerged plant cover across the pond by the end of year 3."
+    "text": "Reach 50% submerged plant cover across Clearwater Pond by the end of year 3."
   },
   "methods": ["secchi_disk", "water_grab", "oxygen_profile", "fish_survey", "inflow_fish_trap", "sediment_core"],
   "interventions": ["plant_submerged", "carp_removal", "carp_barrier", "alum_treatment"],
@@ -134,7 +134,7 @@
       "when": [
         { "var": "secchi", "op": "<", "value": 0.8 },
         { "var": "suspended_sediment", "op": ">", "value": 15 },
-        { "var": "carp", "known": false }
+        { "var": "carp", "measured": false }
       ],
       "text": "Most of the murk is sediment, not algae. Wind alone rarely keeps this much mud in suspension."
     }

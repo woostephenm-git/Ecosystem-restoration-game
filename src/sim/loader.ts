@@ -10,6 +10,7 @@ import {
   MapSchema,
   MethodSchema,
   MissionSchema,
+  TerrainSchema,
   VariableSchema,
   ZoneSchema,
   type BoundaryConditions,
@@ -20,6 +21,7 @@ import {
   type Link,
   type Method,
   type Mission,
+  type Terrain,
   type Variable,
   type Zone,
 } from './schema';
@@ -39,6 +41,7 @@ export interface DataBundle {
   missions: Map<string, Mission>;
   maps: Map<string, GameMap>;
   boundaryConditions: Map<string, BoundaryConditions>;
+  terrains: Map<string, Terrain>;
 }
 
 export class DataError extends Error {
@@ -87,6 +90,7 @@ export function loadData(files: RawFiles): DataBundle {
   const missions = new Map<string, Mission>();
   const maps = new Map<string, GameMap>();
   const boundaryConditions = new Map<string, BoundaryConditions>();
+  const terrains = new Map<string, Terrain>();
   for (const [path, raw] of Object.entries(files)) {
     if (path.startsWith('missions/')) {
       const m = parse(MissionSchema, raw, path, problems);
@@ -94,6 +98,9 @@ export function loadData(files: RawFiles): DataBundle {
     } else if (path.startsWith('maps/')) {
       const m = parse(MapSchema, raw, path, problems);
       if (m) maps.set(path, m);
+    } else if (path.startsWith('terrain/')) {
+      const t = parse(TerrainSchema, raw, path, problems);
+      if (t) terrains.set(path, t);
     } else if (path.startsWith('bc/')) {
       const b = parse(BoundaryConditionsSchema, raw, path, problems);
       if (b) boundaryConditions.set(path, b);
@@ -180,6 +187,9 @@ export function loadData(files: RawFiles): DataBundle {
       cells.add(cell);
     }
     for (const e of [...map.inlets, ...map.outlets]) if (!ids.has(e.tile)) problems.push(`${path}: inlet or outlet names unknown tile "${e.tile}"`);
+    const bodyIds = new Set(map.bodies.map((b) => b.id));
+    for (const tile of map.tiles) if (tile.body && !bodyIds.has(tile.body)) problems.push(`${path} tile ${tile.id}: unknown body "${tile.body}"`);
+    if (map.terrain && !files[map.terrain]) problems.push(`${path}: terrain "${map.terrain}" not found`);
   }
   for (const [path, bc] of boundaryConditions) {
     for (const ref of Object.keys(bc.values)) {
@@ -189,5 +199,5 @@ export function loadData(files: RawFiles): DataBundle {
   }
 
   if (problems.length) throw new DataError(problems);
-  return { layers, zones, variables, links, methods, interventions, missions, maps, boundaryConditions };
+  return { layers, zones, variables, links, methods, interventions, missions, maps, boundaryConditions, terrains };
 }

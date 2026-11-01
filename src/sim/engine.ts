@@ -52,6 +52,12 @@ export interface EdgeFluxes {
   outflow: Record<string, string[]>;
 }
 
+/** Tile state at a moment in time, for restoring a spun-up pond without re-running it. */
+export interface SimSnapshot {
+  t: number;
+  values: Record<string, number>[];
+}
+
 export class Simulation {
   /** Absolute simulated day, counted from the start of spin-up. */
   t = 0;
@@ -69,6 +75,9 @@ export class Simulation {
   private readonly boundaryVars: Variable[];
   private readonly lateralVars: Variable[];
   private readonly linksTo = new Map<string, NormalLink[]>();
+  /** Cached for the inner loop: simulated water tile indices, and each stock with its incoming links. */
+  private readonly waterIdx: number[];
+  private readonly stockLinks: { v: Variable; links: NormalLink[] }[];
   private readonly bc: BoundaryConditions;
 
   constructor(
@@ -92,19 +101,36 @@ export class Simulation {
     this.lateralVars = vars.filter((v) => v.kind === 'lateral');
     this.derivedOrder = this.sortDerived(vars.filter((v) => v.kind === 'derived'));
 
+    // Pond defaults apply to water only; land tiles carry just their own initial values.
     this.tiles = map.tiles.map((tile) => {
       const values: Record<string, number> = {};
-      for (const v of this.stocks) values[v.id] = tile.initial[v.id] ?? map.defaults[v.id] ?? 0;
+      for (const v of this.stocks) values[v.id] = tile.initial[v.id] ?? (tile.body ? map.defaults[v.id] : undefined) ?? 0;
       return { id: tile.id, values };
     });
     this.lateral = this.tiles.map(() => ({}));
 
     const depth = this.tiles.map((t) => t.values.water_depth ?? 0);
-    const surface = this.tiles.map((t, i) => (t.values.bed_elevation ?? 0) + depth[i]);
-    this.grid = new Grid(map, surface, depth);
+    const elevation = this.tiles.map((t) => t.values.bed_elevation ?? 0);
+    this.grid = new Grid(map, depth, elevation);
+    this.waterIdx = this.grid.waterTiles().map((t) => t.index);
+    this.stockLinks = this.stocks.map((v) => ({ v, links: this.linksTo.get(v.id) ?? [] }));
 
+    this.updateBoundary();
     this.mapPass();
-    for (const tile of this.tiles) this.updateDerived(tile);
+    this.updateAllDerived();
+  }
+
+  snapshot(): SimSnapshot {
+    return { t: this.t, values: this.tiles.map((t) => ({ ...t.values })) };
+  }
+
+  /** Continue from a snapshot. Boundary noise comes from this simulation's own seed from here on. */
+  restore(s: SimSnapshot) {
+    this.t = s.t;
+    s.values.forEach((v, i) => Object.assign(this.tiles[i].values, v));
+    this.updateBoundary();
+    this.mapPass();
+    this.updateAllDerived();
   }
 
   /** Days since the player-facing mission clock started (negative during spin-up). */
@@ -152,6 +178,11 @@ export class Simulation {
     return clamp(v, applyTransform(v.derived!.transform, sum));
   }
 
+  /** Derived variables only mean something on simulated water tiles. */
+  private updateAllDerived() {
+    for (const i of this.waterIdx) this.updateDerived(this.tiles[i]);
+  }
+
   private updateDerived(tile: TileState) {
     const get = this.lookup(tile);
     for (const v of this.derivedOrder) tile.values[v.id] = this.evalDerived(v.id, get);
@@ -183,9 +214,9 @@ export class Simulation {
    * then hand the results to tiles as lateral input variables.
    */
   private mapPass() {
-    this.updateBoundary();
     const g = this.grid;
-    const m = g.map.mixing_per_day;
+    const perTile = (diffusivity: number) => diffusivity / g.area;
+    const m = perTile(g.map.mixing_m2_per_day);
     const volume = this.tiles.map((t) => g.area * Math.max(t.values.water_depth ?? 0, 1e-3));
     const nWater = g.waterTiles().length;
 
@@ -211,7 +242,7 @@ export class Simulation {
               break;
             }
             const terms: LateralTerm[] = [];
-            for (const d of g.donors[i]) terms.push({ tile: d, variable: lat.of, weight: (q * g.throughShare[d]) / volume[i] / exchange });
+            for (const f of g.inflows[i]) terms.push({ tile: f.to, variable: lat.of, weight: (q * f.share) / volume[i] / exchange });
             // Inlet water without a boundary concentration is clean: it dilutes but adds nothing.
             if (g.inletShare[i] > 0 && lat.boundary) terms.push({ tile: null, variable: lat.boundary, weight: (q * g.inletShare[i]) / volume[i] / exchange });
             for (const k of nb) terms.push({ tile: k, variable: lat.of, weight: m / exchange });
@@ -219,29 +250,29 @@ export class Simulation {
             break;
           }
           case 'dispersal_in': {
-            const terms: LateralTerm[] = nb.map((k) => ({ tile: k, variable: lat.of, weight: lat.rate }));
+            const terms: LateralTerm[] = nb.map((k) => ({ tile: k, variable: lat.of, weight: perTile(lat.diffusivity_m2_per_day) }));
             // Pond-wide immigration all arrives at the inlets, so concentrate it there.
             if (g.inletShare[i] > 0 && lat.boundary) terms.push({ tile: null, variable: lat.boundary, weight: g.inletShare[i] * nWater });
             out[v.id] = { constant: 0, terms };
             break;
           }
           case 'neighbour_count':
-            out[v.id] = { constant: lat.scale * nb.length, terms: [] };
+            out[v.id] = { constant: perTile(lat.diffusivity_m2_per_day) * nb.length, terms: [] };
             break;
-          case 'neighbour_mean':
-            out[v.id] = { constant: 0, terms: nb.map((k) => ({ tile: k, variable: lat.of, weight: 1 / nb.length })) };
+          case 'neighbour_sum':
+            out[v.id] = { constant: 0, terms: nb.map((k) => ({ tile: k, variable: lat.of, weight: perTile(lat.diffusivity_m2_per_day) })) };
             break;
         }
       }
     }
 
-    // Evaluate after all combos are built, from the same snapshot of tile state.
-    const values = this.tiles.map((_, i) => {
-      const vals: Record<string, number> = {};
-      for (const v of this.lateralVars) vals[v.id] = clamp(v, this.evalCombo(this.lateral[i][v.id]));
-      return vals;
-    });
-    this.tiles.forEach((t, i) => Object.assign(t.values, values[i]));
+    this.evalLateral();
+  }
+
+  /** Re-evaluate lateral inputs from the current tile state, all from the same snapshot. */
+  private evalLateral() {
+    const values = this.waterIdx.map((i) => this.lateralVars.map((v) => clamp(v, this.evalCombo(this.lateral[i][v.id]))));
+    this.waterIdx.forEach((i, k) => this.lateralVars.forEach((v, j) => (this.tiles[i].values[v.id] = values[k][j])));
   }
 
   evalCombo(c: LateralCombo): number {
@@ -254,24 +285,53 @@ export class Simulation {
     for (let i = 0; i < days; i++) this.tick();
   }
 
+  /**
+   * Explicit Euler needs rate × dt well below 1. Lateral exchange on small tiles can reach
+   * a few per day, so daily stocks are integrated in as many substeps as the fastest exchange needs.
+   */
+  substeps(): number {
+    let fastest = 0;
+    for (const v of this.lateralVars) {
+      const p = v.lateral!.process;
+      if (p !== 'water_exchange' && p !== 'neighbour_count') continue;
+      for (const i of this.waterIdx) fastest = Math.max(fastest, this.tiles[i].values[v.id] ?? 0);
+    }
+    // 0.8 keeps every decay term monotone (1 − rate × dt > 0) without wasting substeps.
+    return Math.min(48, Math.max(1, Math.ceil(fastest / 0.8)));
+  }
+
   private tick() {
+    // Boundary conditions (and their random noise) advance once per day, so a seed gives
+    // the same run whatever the substep count.
+    this.updateBoundary();
     this.mapPass();
-    for (const [i, tile] of this.tiles.entries()) {
-      if (!this.grid.tiles[i].water) continue;
-      this.updateDerived(tile);
-      const get = this.lookup(tile);
-      const next: Record<string, number> = {};
-      for (const v of this.stocks) {
-        const dt = v.update_interval_days;
-        if (this.t % dt !== 0) continue;
-        let r = 0;
-        for (const link of this.linksTo.get(v.id) ?? []) r += evalLink(link, get);
-        next[v.id] = clamp(v, tile.values[v.id] + dt * r);
+    const n = this.substeps();
+    for (let s = 0; s < n; s++) {
+      // The weights only change with the daily boundary values; the inputs change every substep.
+      if (s > 0) this.evalLateral();
+      const next = new Array<number>(this.stockLinks.length);
+      for (const i of this.waterIdx) {
+        const tile = this.tiles[i];
+        this.updateDerived(tile);
+        const get = this.lookup(tile);
+        for (let k = 0; k < this.stockLinks.length; k++) {
+          const { v, links } = this.stockLinks[k];
+          const interval = v.update_interval_days;
+          // Slow stocks take one full step on their interval; daily stocks take n substeps.
+          if (interval > 1 && (s > 0 || this.t % interval !== 0)) {
+            next[k] = tile.values[v.id];
+            continue;
+          }
+          const dt = interval > 1 ? interval : 1 / n;
+          let r = 0;
+          for (let l = 0; l < links.length; l++) r += evalLink(links[l], get);
+          next[k] = clamp(v, tile.values[v.id] + dt * r);
+        }
+        for (let k = 0; k < this.stockLinks.length; k++) tile.values[this.stockLinks[k].v.id] = next[k];
       }
-      Object.assign(tile.values, next);
     }
     this.applyEffects();
-    for (const tile of this.tiles) this.updateDerived(tile);
+    this.updateAllDerived();
     this.t += 1;
   }
 
@@ -335,11 +395,11 @@ export class Simulation {
     const map = g.map;
     const from = {
       inlets: map.inlets.filter((x) => x.tile === tileId).map((x) => x.name),
-      upstream: g.donors[i].map((d) => g.tiles[d].id),
+      upstream: g.inflows[i].map((f) => g.tiles[f.to].id),
       mixing: g.neighbours4[i].map((k) => g.tiles[k].id),
     };
-    const r = g.receiver[i];
-    const to = r === OFF_MAP ? map.outlets.find((x) => x.tile === tileId)!.name : r === null ? 'No outflow' : g.tiles[r].id;
+    const dest = g.outflows[i].map((f) => (f.to === OFF_MAP ? map.outlets.find((x) => x.tile === tileId)!.name : g.tiles[f.to].id));
+    const to = dest.length ? dest.join(', ') : 'No through-flow';
     const inflow: Record<string, string[]> = {};
     const outflow: Record<string, string[]> = {};
     for (const v of this.lateralVars) {

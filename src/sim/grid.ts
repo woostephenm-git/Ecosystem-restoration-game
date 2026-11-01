@@ -1,4 +1,4 @@
-// Static map geometry: neighbours, D8 flow directions and flow accumulation.
+// Static map geometry: neighbours, water flow and land runoff directions.
 // Pure functions of the map data and initial tile state; no simulation state.
 import type { GameMap } from './schema';
 
@@ -10,123 +10,160 @@ export interface GridTile {
   row: number;
   col: number;
   description: string;
+  /** Water body id, or null on land. */
+  body: string | null;
+  /** Part of a simulated water body. Only these tiles run the sim. */
   water: boolean;
 }
 
-const D8 = [
+/** One face-to-face water flow, as a fraction of the total inlet discharge. */
+export interface Flow {
+  /** Tile index, or OFF_MAP when the water leaves through an outlet. */
+  to: number;
+  share: number;
+}
+
+const D4 = [
   [-1, 0],
   [0, 1],
   [1, 0],
   [0, -1],
-  [-1, 1],
-  [1, 1],
-  [1, -1],
-  [-1, -1],
 ] as const;
+const D8 = [...D4, [-1, 1], [1, 1], [1, -1], [-1, -1]] as const;
 
 export class Grid {
   readonly tiles: GridTile[];
   readonly rows: number;
   readonly cols: number;
   readonly area: number;
-  /** Water neighbours sharing a face (used for mixing and dispersal). */
+  /** Simulated water neighbours sharing a face (used for flow, mixing and dispersal). */
   readonly neighbours4: number[][];
-  /** D8 receiver of each tile's outflow: a tile index, OFF_MAP through an outlet, or null for no outflow. */
-  readonly receiver: (number | null)[];
-  /** Tiles that drain into each tile. */
-  readonly donors: number[][];
+  /** Water leaving each tile, by face. */
+  readonly outflows: Flow[][];
+  /** Water entering each tile from other tiles (`to` holds the source tile). */
+  readonly inflows: Flow[][];
   /** Fraction of the total inlet discharge entering each tile directly from an inlet. */
   readonly inletShare: number[];
   /** Fraction of the total inlet discharge passing through each tile. */
   readonly throughShare: number[];
-  /** Tile indices ordered upstream to downstream. */
-  readonly flowOrder: number[];
+  /** Net flow direction on each water tile, in tiles (x east, z south), scaled by throughShare. */
+  readonly flowVector: { x: number; z: number }[];
+  /** Steepest-descent (D8) neighbour that land runoff drains to; null for water, OFF_MAP for a pit. */
+  readonly runoffTo: (number | null)[];
   private readonly index = new Map<string, number>();
 
   constructor(
     readonly map: GameMap,
-    /** Water surface elevation of each tile, in map tile order. Water tiles have positive depth. */
-    surface: number[],
+    /** Water depth of each tile, in map tile order. */
     depth: number[],
+    /** Bed (ground) elevation of each tile, in map tile order. */
+    elevation: number[],
   ) {
     this.rows = map.rows;
     this.cols = map.cols;
     this.area = map.tile_size_m * map.tile_size_m;
-    this.tiles = map.tiles.map((t, i) => ({ index: i, id: t.id, row: t.row, col: t.col, description: t.description, water: depth[i] > 0 }));
+    const simulated = new Set(map.bodies.filter((b) => b.simulated).map((b) => b.id));
+    this.tiles = map.tiles.map((t, i) => ({
+      index: i,
+      id: t.id,
+      row: t.row,
+      col: t.col,
+      description: t.description,
+      body: t.body ?? null,
+      water: !!t.body && simulated.has(t.body) && depth[i] > 0,
+    }));
     this.tiles.forEach((t) => this.index.set(t.id, t.index));
+    const cell = new Map(this.tiles.map((t) => [`${t.row},${t.col}`, t]));
+    const at = (r: number, c: number) => cell.get(`${r},${c}`);
 
-    const at = (r: number, c: number) => this.tiles.find((t) => t.row === r && t.col === c);
     this.neighbours4 = this.tiles.map((t) =>
-      t.water ? D8.slice(0, 4).flatMap(([dr, dc]) => at(t.row + dr, t.col + dc) ?? []).filter((n) => n.water).map((n) => n.index) : [],
-    );
-    const neighbours8 = this.tiles.map((t) =>
-      D8.flatMap(([dr, dc]) => {
-        const n = at(t.row + dr, t.col + dc);
-        return n?.water ? [{ index: n.index, dist: dr && dc ? Math.SQRT2 : 1 }] : [];
-      }),
+      t.water ? D4.flatMap(([dr, dc]) => at(t.row + dr, t.col + dc) ?? []).filter((n) => n.water).map((n) => n.index) : [],
     );
 
-    // Breadth-first distance to the nearest outlet across water tiles, used to route across flat water.
-    const outletTiles = new Set(map.outlets.map((o) => this.index.get(o.tile)!));
-    const toOutlet = this.tiles.map(() => Infinity);
-    const queue = [...outletTiles];
-    queue.forEach((i) => (toOutlet[i] = 0));
-    while (queue.length) {
-      const i = queue.shift()!;
-      for (const n of neighbours8[i]) {
-        if (toOutlet[n.index] === Infinity) {
-          toOutlet[n.index] = toOutlet[i] + 1;
-          queue.push(n.index);
+    // Steady flow through the water (ported from the bench's solveSteadyFlow): solve
+    // div(T grad phi) = 0 with transmissivity T = depth, phi = 1 at inlets and 0 at outlets,
+    // no flow across shores. Face flux = T_face × (phi_i − phi_j), normalised to the inlet total.
+    const inlet = new Set(map.inlets.map((x) => this.index.get(x.tile)!));
+    const outlet = new Set(map.outlets.map((x) => this.index.get(x.tile)!));
+    const phi = this.tiles.map((t) => 1 - t.col / Math.max(1, this.cols - 1));
+    const trans = (i: number, j: number) => (2 * depth[i] * depth[j]) / (depth[i] + depth[j]);
+    for (const i of inlet) phi[i] = 1;
+    for (const i of outlet) phi[i] = 0;
+    const free = this.tiles.filter((t) => t.water && !inlet.has(t.index) && !outlet.has(t.index)).map((t) => t.index);
+    for (let it = 0; it < 4000; it++) {
+      let change = 0;
+      for (const i of free) {
+        let s = 0;
+        let w = 0;
+        for (const j of this.neighbours4[i]) {
+          const tij = trans(i, j);
+          s += tij * phi[j];
+          w += tij;
         }
+        if (w <= 0) continue;
+        const next = phi[i] + 1.85 * (s / w - phi[i]);
+        change = Math.max(change, Math.abs(next - phi[i]));
+        phi[i] = next;
+      }
+      if (change < 1e-10) break;
+    }
+
+    const raw: Flow[][] = this.tiles.map(() => []);
+    for (const t of this.tiles) {
+      if (!t.water) continue;
+      for (const j of this.neighbours4[t.index]) {
+        const f = trans(t.index, j) * (phi[t.index] - phi[j]);
+        if (f > 0) raw[t.index].push({ to: j, share: f });
       }
     }
-
-    const EPS = 1e-6;
-    this.receiver = this.tiles.map((t) => {
-      if (!t.water) return null;
-      if (outletTiles.has(t.index)) return OFF_MAP;
-      let best: number | null = null;
-      let bestDrop = EPS;
-      for (const n of neighbours8[t.index]) {
-        const drop = (surface[t.index] - surface[n.index]) / n.dist;
-        if (drop > bestDrop) {
-          bestDrop = drop;
-          best = n.index;
+    const total = [...inlet].reduce((s, i) => s + raw[i].reduce((a, f) => a + f.share, 0), 0);
+    const norm = total > 0 ? 1 / total : 0;
+    this.outflows = raw.map((list) => list.map((f) => ({ to: f.to, share: f.share * norm })));
+    this.inflows = this.tiles.map(() => []);
+    this.outflows.forEach((list, i) => list.forEach((f) => this.inflows[f.to].push({ to: i, share: f.share })));
+    // Inlets supply what leaves them; outlets pass on what reaches them.
+    this.inletShare = this.tiles.map((t) => (inlet.has(t.index) ? this.outflows[t.index].reduce((s, f) => s + f.share, 0) : 0));
+    for (const i of outlet) {
+      const arriving = this.inflows[i].reduce((s, f) => s + f.share, 0);
+      if (arriving > 0) this.outflows[i].push({ to: OFF_MAP, share: arriving });
+    }
+    this.throughShare = this.tiles.map((_, i) => this.inletShare[i] + this.inflows[i].reduce((s, f) => s + f.share, 0));
+    this.flowVector = this.tiles.map((t, i) => {
+      const v = { x: 0, z: 0 };
+      for (const f of this.outflows[i]) {
+        if (f.to === OFF_MAP) {
+          const face = map.outlets.find((o) => o.tile === t.id)!.face;
+          v.x += f.share * (face === 'E' ? 1 : face === 'W' ? -1 : 0);
+          v.z += f.share * (face === 'S' ? 1 : face === 'N' ? -1 : 0);
+        } else {
+          v.x += f.share * (this.tiles[f.to].col - t.col);
+          v.z += f.share * (this.tiles[f.to].row - t.row);
         }
       }
-      if (best !== null) return best;
-      // Flat water surface: step toward the outlet, preferring face neighbours over diagonals.
-      const closer = neighbours8[t.index]
-        .filter((n) => toOutlet[n.index] < toOutlet[t.index] && Math.abs(surface[n.index] - surface[t.index]) <= EPS)
-        .sort((a, b) => toOutlet[a.index] - toOutlet[b.index] || a.dist - b.dist || a.index - b.index);
-      return closer[0]?.index ?? null;
+      if (inlet.has(i)) {
+        const face = map.inlets.find((o) => o.tile === t.id)!.face;
+        v.x += this.inletShare[i] * (face === 'W' ? 1 : face === 'E' ? -1 : 0);
+        v.z += this.inletShare[i] * (face === 'N' ? 1 : face === 'S' ? -1 : 0);
+      }
+      return v;
     });
 
-    this.donors = this.tiles.map(() => []);
-    this.receiver.forEach((r, i) => {
-      if (r !== null && r !== OFF_MAP) this.donors[r].push(i);
+    // Land runoff: steepest descent over all eight neighbours (display only in Mission 1).
+    this.runoffTo = this.tiles.map((t) => {
+      if (t.body) return null;
+      let best = OFF_MAP;
+      let drop = 0;
+      for (const [dr, dc] of D8) {
+        const nb = at(t.row + dr, t.col + dc);
+        if (!nb) continue;
+        const d = (elevation[t.index] - elevation[nb.index]) / Math.hypot(dr, dc);
+        if (d > drop) {
+          drop = d;
+          best = nb.index;
+        }
+      }
+      return best;
     });
-
-    this.inletShare = this.tiles.map(() => 0);
-    const totalShare = map.inlets.reduce((s, i) => s + i.share, 0);
-    for (const inlet of map.inlets) this.inletShare[this.index.get(inlet.tile)!] += inlet.share / totalShare;
-
-    // Topological order over the D8 graph (it has no cycles: each step drops or moves closer to an outlet).
-    const indegree = this.donors.map((d) => d.length);
-    const ready = this.tiles.filter((t) => indegree[t.index] === 0).map((t) => t.index);
-    this.flowOrder = [];
-    while (ready.length) {
-      const i = ready.shift()!;
-      this.flowOrder.push(i);
-      const r = this.receiver[i];
-      if (r !== null && r !== OFF_MAP && --indegree[r] === 0) ready.push(r);
-    }
-    this.throughShare = this.tiles.map(() => 0);
-    for (const i of this.flowOrder) {
-      this.throughShare[i] += this.inletShare[i];
-      const r = this.receiver[i];
-      if (r !== null && r !== OFF_MAP) this.throughShare[r] += this.throughShare[i];
-    }
   }
 
   indexOf(tileId: string): number {
@@ -137,5 +174,10 @@ export class Grid {
 
   waterTiles(): GridTile[] {
     return this.tiles.filter((t) => t.water);
+  }
+
+  /** Tile at a grid position, if any. */
+  at(row: number, col: number): GridTile | undefined {
+    return this.tiles.find((t) => t.row === row && t.col === col);
   }
 }
