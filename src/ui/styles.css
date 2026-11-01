@@ -1989,3 +1989,85 @@ button:focus-visible {
   padding-left: 20px;
   line-height: 1.5;
 }
+
+/* Cross-section motion. Delays come from drawing.ts so motion carries on across re-renders. */
+.drawing .anim {
+  transform-box: view-box;
+}
+@keyframes xs-wave {
+  to {
+    transform: translateX(var(--wl));
+  }
+}
+@keyframes xs-drift {
+  to {
+    transform: translate(var(--sx), var(--sy));
+  }
+}
+@keyframes xs-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(9);
+    opacity: 0;
+  }
+}
+@keyframes xs-sway {
+  from {
+    transform: rotate(-4deg);
+  }
+  to {
+    transform: rotate(4deg);
+  }
+}
+@keyframes xs-reed {
+  from {
+    transform: rotate(-1.5deg);
+  }
+  to {
+    transform: rotate(1.5deg);
+  }
+}
+@keyframes xs-swim {
+  0% {
+    transform: translateX(0) scaleX(1);
+  }
+  49.9% {
+    transform: translateX(var(--dx)) scaleX(1);
+  }
+  50% {
+    transform: translateX(var(--dx)) scaleX(-1);
+  }
+  99.9% {
+    transform: translateX(0) scaleX(-1);
+  }
+  100% {
+    transform: translateX(0) scaleX(1);
+  }
+}
+@keyframes xs-tail {
+  from {
+    transform: skewY(-14deg);
+  }
+  to {
+    transform: skewY(14deg);
+  }
+}
+@keyframes xs-murk {
+  from {
+    opacity: 0.3;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drawing .anim {
+    animation: none !important;
+  }
+}

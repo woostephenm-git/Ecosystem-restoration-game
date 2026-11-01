@@ -29,6 +29,17 @@ function mix(a: string, b: string, t: number): string {
   return `#${c.map((x) => x.toString(16).padStart(2, '0')).join('')}`;
 }
 
+/**
+ * Inline style for a looping CSS animation that carries on across re-renders. The page is
+ * rebuilt on every sim tick; a negative delay taken from one shared clock starts each new
+ * element exactly where the old one was.
+ */
+function loop(name: string, seconds: number, offset: number, extra = ''): string {
+  const now = typeof performance === 'undefined' ? 0 : performance.now() / 1000;
+  const delay = -((now + offset) % seconds);
+  return `animation:${name} ${seconds.toFixed(2)}s ${extra} infinite;animation-delay:${delay.toFixed(2)}s;`;
+}
+
 function mid(game: Game, tileId: string, id: string): number | null {
   const b = bounds(game.known(tileId, id));
   return b ? (b.lo + b.hi) / 2 : null;
@@ -80,18 +91,48 @@ export function drawTile(game: Game, tileId: string, zoneOrder: string[], select
     const sx = (x: number) => Math.abs(shallowX - x);
     parts.push(`<circle cx="${sx(-10)}" cy="${airY + 48}" r="58" fill="#5E7E4E"/><circle cx="${sx(34)}" cy="${airY + 22}" r="32" fill="#6F8F5A"/>`);
   }
-  parts.push(`<rect x="0" y="${waterY}" width="${W}" height="${sedY - waterY}" fill="url(#wgrad)"/>`);
+  // Waves: the surface rides higher and lower with the wind, which the player can see.
+  const wind = mid(game, tileId, 'wind') ?? 3;
+  const amp = Math.min(4, 1.2 + wind * 0.35);
+  const waveLen = 36;
+  parts.push(`<rect x="0" y="${waterY + amp}" width="${W}" height="${sedY - waterY - amp}" fill="url(#wgrad)"/>`);
+  let wave = `M${-waveLen} ${waterY} Q${-waveLen * 0.75} ${waterY - 2 * amp} ${-waveLen / 2} ${waterY}`;
+  for (let x = 0; x <= W + waveLen; x += waveLen / 2) wave += ` T${x} ${waterY}`;
+  parts.push(
+    `<g class="anim" style="${loop('xs-wave', Math.max(1.6, 4.5 - wind * 0.3), 0, 'linear')}--wl:${waveLen}px">` +
+      `<path d="${wave} V${waterY + amp + 1} H${-waveLen} Z" fill="${water}"/>` +
+      `<path d="${wave}" fill="none" stroke="#6FA3C7" stroke-width="1.5"/></g>`,
+  );
+
+  // The water itself as a clip region, from above the wave crests down to this tile's bed.
+  const bedLine = prof.depths.map((d, k) => `${px(k).toFixed(1)},${yOfDepth(d).toFixed(1)}`).reverse();
+  parts.push(`<clipPath id="xs-water"><polygon points="0,${waterY - 2 * amp} ${W},${waterY - 2 * amp} ${bedLine.join(' ')}"/></clipPath>`);
 
   // Suspended particles: drawn only as a visual impression of murk, scaled by visible clarity.
+  // Each one wanders slowly in the water.
   const specks = Math.round((1 - clarity) * 34);
   const speckParts: string[] = [];
   for (let i = 0; i < specks; i++) {
     const x = 8 + jitter(i) * (W - 16);
     const y = waterY + 10 + jitter(i + 100) * (bedAt(x) - waterY - 20);
     if (y < waterY + 6) continue;
-    speckParts.push(`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(1 + jitter(i + 200) * 1.2).toFixed(1)}"/>`);
+    const sx = ((jitter(i + 1000) - 0.5) * 22).toFixed(1);
+    const sy = ((jitter(i + 1100) - 0.5) * 14).toFixed(1);
+    const style = `${loop('xs-drift', 5 + jitter(i + 1200) * 6, jitter(i + 1300) * 10, 'ease-in-out alternate')}--sx:${sx}px;--sy:${sy}px`;
+    speckParts.push(`<circle class="anim" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(1 + jitter(i + 200) * 1.2).toFixed(1)}" style="${style}"/>`);
   }
-  parts.push(`<g fill="#A08C62" opacity="0.5">${speckParts.join('')}</g>`);
+  parts.push(`<g fill="#A08C62" opacity="0.5" clip-path="url(#xs-water)">${speckParts.join('')}</g>`);
+
+  // Rings spreading on the surface now and then.
+  const rings: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    const x = 30 + jitter(i + 1400) * (W - 60);
+    if (at(x) < 0.05) continue;
+    rings.push(
+      `<ellipse class="anim" cx="${x.toFixed(1)}" cy="${waterY + 1}" rx="2" ry="0.7" style="${loop('xs-ring', 4.2, i * 1.4, 'ease-out')}transform-origin:${x.toFixed(1)}px ${waterY + 1}px"/>`,
+    );
+  }
+  parts.push(`<g fill="none" stroke="#CFE3EE" stroke-width="1" vector-effect="non-scaling-stroke">${rings.join('')}</g>`);
 
   // Sediment under the bed profile with a dark surface layer, then bedrock.
   const bedPts = prof.depths.map((d, k) => `${px(k).toFixed(1)},${yOfDepth(d).toFixed(1)}`);
@@ -118,7 +159,10 @@ export function drawTile(game: Game, tileId: string, zoneOrder: string[], select
     const d = at(x);
     if (d < -0.05 || d > 0.45) continue;
     const tipY = airY + 70 + jitter(i + 300) * 30;
-    reeds.push(`<path d="M${x} ${bedAt(x).toFixed(1)} V${Math.min(tipY, waterY - 12).toFixed(1)}"/>`);
+    const base = bedAt(x);
+    reeds.push(
+      `<path class="anim" d="M${x} ${base.toFixed(1)} V${Math.min(tipY, waterY - 12).toFixed(1)}" style="${loop('xs-reed', 3.4 + jitter(i + 1500), x / 50, 'ease-in-out alternate')}transform-origin:${x}px ${base.toFixed(1)}px"/>`,
+    );
   }
   parts.push(`<g stroke="#6E8F4A" stroke-width="2" stroke-linecap="round">${reeds.join('')}</g>`);
 
@@ -133,7 +177,10 @@ export function drawTile(game: Game, tileId: string, zoneOrder: string[], select
     if (at(x) < 0.12 || room < 20) continue;
     const h = Math.min(room - 6, 30 + jitter(i + 500) * 90 * (0.4 + cover / 160));
     const bend = (jitter(i + 600) - 0.5) * 14;
-    stemParts.push(`<path d="M${x.toFixed(1)} ${by.toFixed(1)} Q${(x + bend).toFixed(1)} ${(by - h / 2).toFixed(1)} ${(x - bend / 2).toFixed(1)} ${(by - h).toFixed(1)}"/>`);
+    // Swaying from the root; the phase follows x, so a gentle current seems to pass through.
+    stemParts.push(
+      `<path class="anim" d="M${x.toFixed(1)} ${by.toFixed(1)} Q${(x + bend).toFixed(1)} ${(by - h / 2).toFixed(1)} ${(x - bend / 2).toFixed(1)} ${(by - h).toFixed(1)}" style="${loop('xs-sway', 3 + jitter(i + 1600) * 1.4, x / 45, 'ease-in-out alternate')}transform-origin:${x.toFixed(1)}px ${by.toFixed(1)}px"/>`,
+    );
   }
   parts.push(`<g stroke="#5FA35A" stroke-width="1.8" fill="none" stroke-linecap="round">${stemParts.join('')}</g>`);
 
@@ -143,23 +190,35 @@ export function drawTile(game: Game, tileId: string, zoneOrder: string[], select
     const count = Math.min(7, Math.round(carp.value / 70));
     const fish: string[] = [];
     for (let i = 0; i < count; i++) {
-      const x = 30 + jitter(i + 700) * (W - 60);
-      const room = bedAt(x) - waterY;
+      const x0 = 30 + jitter(i + 700) * (W - 60);
+      const room = bedAt(x0) - waterY;
       if (room < 30) continue;
-      const y = bedAt(x) - 12 - jitter(i + 800) * Math.min(50, room - 26);
-      const rot = (jitter(i + 900) - 0.5) * 30;
-      fish.push(
-        `<g transform="rotate(${rot.toFixed(0)} ${x.toFixed(0)} ${y.toFixed(0)})"><path d="M${x - 20} ${y} Q${x - 2} ${y - 9} ${x + 18} ${y} Q${x - 2} ${y + 8} ${x - 20} ${y} Z"/><path d="M${x + 17} ${y} L${x + 27} ${y - 7} L${x + 26} ${y + 7} Z"/></g>`,
-      );
+      const y = bedAt(x0) - 12 - jitter(i + 800) * Math.min(50, room - 26);
+      // The stretch of water deep enough to swim along at this height.
+      const deep = (x: number) => bedAt(x) - y > 12;
+      let lo = x0;
+      let hi = x0;
+      while (lo > 4 && deep(lo - 2)) lo -= 2;
+      while (hi < W - 4 && deep(hi + 2)) hi += 2;
+      // The fish faces left (tail on the right): it starts at the right end of its stretch,
+      // swims left, turns, and swims back.
+      const left = Math.min(x0, lo + 22);
+      const x = Math.max(left, hi - 28);
+      const dx = left - x;
+      const rot = (jitter(i + 900) - 0.5) * 16;
+      const tail = `<path class="anim" d="M${x + 17} ${y} L${x + 27} ${y - 7} L${x + 26} ${y + 7} Z" style="${loop('xs-tail', 0.45, i * 0.13, 'ease-in-out alternate')}transform-origin:${x + 17}px ${y}px"/>`;
+      const body = `<g transform="rotate(${rot.toFixed(0)} ${x.toFixed(0)} ${y.toFixed(0)})"><path d="M${x - 20} ${y} Q${x - 2} ${y - 9} ${x + 18} ${y} Q${x - 2} ${y + 8} ${x - 20} ${y} Z"/>${tail}</g>`;
+      const swim = Math.abs(dx) > 16 ? loop('xs-swim', (2 * Math.abs(dx)) / (14 + jitter(i + 1700) * 10), jitter(i + 1800) * 20, 'linear') : '';
+      fish.push(`<g class="anim" style="${swim}--dx:${dx.toFixed(1)}px;transform-origin:${x.toFixed(1)}px ${y.toFixed(1)}px">${body}</g>`);
     }
-    parts.push(`<g fill="#B0915A">${fish.join('')}</g>`);
+    parts.push(`<g fill="#B0915A" clip-path="url(#xs-water)">${fish.join('')}</g>`);
     // Stirred-up mud towards the deep end, where carp feed.
     const mx = Math.abs(deepX - 70);
-    if (fish.length) parts.push(`<ellipse cx="${mx}" cy="${(bedAt(mx) - 4).toFixed(1)}" rx="60" ry="10" fill="#6B5A40" opacity="0.45"/>`);
+    if (fish.length)
+      parts.push(`<ellipse class="anim" cx="${mx}" cy="${(bedAt(mx) - 4).toFixed(1)}" rx="60" ry="10" fill="#6B5A40" opacity="0.45" style="${loop('xs-murk', 5, 0, 'ease-in-out alternate')}"/>`);
   }
 
-  // Surface line, and a depth scale at the deep end (labelled once depth has been measured).
-  parts.push(`<path d="M0 ${waterY} H${W}" stroke="#6FA3C7" stroke-width="1.5"/>`);
+  // Depth scale at the deep end (labelled once depth has been measured).
   const deepRight = prof.shallowLeft;
   const scaleX = deepRight ? W - 6 : 6;
   const tickDir = deepRight ? -4 : 4;
