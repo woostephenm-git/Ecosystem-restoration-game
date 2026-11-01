@@ -88,7 +88,7 @@ export function renderTile(game: Game, ui: UiState): string {
   return `${header(game, ui)}
   <main class="layout">
     <section class="left" aria-label="Tile cross-section">
-      ${chips(game, ui)}
+      <div class="tile-nav">${tilePicker(game, ui)}${chips(game, ui)}</div>
       <div class="xsec-scroll">${crossSection(game, ui)}</div>
       ${methodsPanel(game, ui)}
       ${interventionsPanel(game, [ui.tileId])}
@@ -105,26 +105,56 @@ export function modals(game: Game, ui: UiState): string {
   return `${ui.showBriefing ? briefing(game) : ''}${ui.showOutcome && game.outcome ? outcomeModal(game) : ''}${ui.funding.open && game.mission.funding ? fundingModal(game, ui) : ''}${ui.decision !== null ? decisionModal(game, ui.decision) : ''}`;
 }
 
-/** A small clickable copy of the grid, for jumping between tiles in the investigation view. */
-/** Step to a neighbouring pond tile without going back to the map. */
-function tileSwitcher(game: Game, ui: UiState): string {
+/**
+ * The tiles around this one as a 3 × 3 isometric grid, turned the way the map's opening view
+ * is (north to the upper right). The centre is the tile open now; pond tiles around it open
+ * on click. Land and off-map tiles are drawn but cannot be picked.
+ */
+function tilePicker(game: Game, ui: UiState): string {
   const g = game.sim.grid;
   const t = g.tiles[g.indexOf(ui.tileId)];
-  const dirs: [string, string, number, number][] = [
-    ['north', '↑', -1, 0],
-    ['west', '←', 0, -1],
-    ['east', '→', 0, 1],
-    ['south', '↓', 1, 0],
-  ];
-  const cells = dirs
-    .map(([name, glyph, dr, dc]) => {
+  const CW = 60;
+  const CH = 30;
+  const W = 3 * CW;
+  const H = 3 * CH;
+  const DIRS: Record<string, string> = {
+    '-1,-1': 'north-west',
+    '-1,0': 'north',
+    '-1,1': 'north-east',
+    '0,-1': 'west',
+    '0,1': 'east',
+    '1,-1': 'south-west',
+    '1,0': 'south',
+    '1,1': 'south-east',
+  };
+  const cells: string[] = [];
+  // Draw back to front so the hover outline of a near tile is never hidden.
+  for (let s = -2; s <= 2; s++)
+    for (let dr = -1; dr <= 1; dr++) {
+      const dc = s - dr;
+      if (dc < -1 || dc > 1) continue;
+      // Isometric placement: columns run down-right, rows run down-left.
+      const cx = W / 2 + ((dc - dr) * CW) / 2;
+      const cy = H / 2 + ((dc + dr) * CH) / 2;
+      const pts = `${cx},${cy - CH / 2} ${cx + CW / 2},${cy} ${cx},${cy + CH / 2} ${cx - CW / 2},${cy}`;
       const n = g.at(t.row + dr, t.col + dc);
-      const ok = n?.water;
-      const label = ok ? `Go ${name} to tile ${n!.id}` : `No pond tile to the ${name}`;
-      return `<button type="button" class="tilebtn nav-${name}" ${ok ? `data-action="open-tile:${n!.id}"` : 'disabled'} aria-label="${label}" title="${label}">${ok ? `${glyph} ${n!.id}` : glyph}</button>`;
-    })
-    .join('');
-  return `<div class="switcher" role="group" aria-label="Neighbouring tiles">${cells}</div>`;
+      const here = dr === 0 && dc === 0;
+      const label = n ? `<text x="${cx}" y="${cy + 3.5}" text-anchor="middle">${n.id}</text>` : '';
+      if (here) {
+        cells.push(`<g class="tp here" role="img" aria-label="Tile ${t.id}, open now"><polygon points="${pts}"/>${label}</g>`);
+      } else if (n?.water) {
+        const name = `Go ${DIRS[`${dr},${dc}`]} to tile ${n.id}`;
+        cells.push(`<g class="tp pond" data-action="open-tile:${n.id}" role="button" tabindex="0" aria-label="${name}"><title>${name}</title><polygon points="${pts}"/>${label}</g>`);
+      } else {
+        cells.push(`<g class="tp ${n ? 'land' : 'off'}" aria-hidden="true"><polygon points="${pts}"/>${label}</g>`);
+      }
+    }
+  return `<div class="tile-picker">
+    <svg viewBox="-2 -4 ${W + 26} ${H + 8}" width="${W + 26}" height="${H + 8}" role="group" aria-label="Neighbouring tiles">
+      ${cells.join('')}
+      <g class="tp-north" aria-hidden="true"><path d="M${(3 * W) / 4 + 6} ${H / 4 - 3} l10 -5"/><text x="${(3 * W) / 4 + 18}" y="${H / 4 - 6}">N</text></g>
+    </svg>
+  </div>`;
 }
 
 export function header(game: Game, ui: UiState): string {
@@ -151,7 +181,6 @@ export function header(game: Game, ui: UiState): string {
       <div class="t1">${title}</div>
       <div class="t2">Mission 1: ${esc(game.mission.title)} · ${cal.label}</div>
     </div>
-    ${onMap || onDebrief ? '' : tileSwitcher(game, ui)}
     <div class="grow"></div>
     ${game.outcome && !onDebrief ? `<button type="button" class="btn" data-action="debrief">Debrief</button><div class="sep"></div>` : ''}
     ${time}

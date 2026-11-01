@@ -44,7 +44,8 @@ export function gauge(v: Variable, k: Known, size: 'mini' | 'full' = 'mini'): st
     const r = scalePos(v, b.hi);
     parts.push(`<span class="g-band" style="left:${(l * 100).toFixed(1)}%;width:${Math.max(1.5, (r - l) * 100).toFixed(1)}%"></span>`);
   } else if (b) {
-    parts.push(`<span class="g-fill" style="width:${pct(b.lo)}"></span><span class="g-mark" style="left:${pct(b.lo)}"></span>`);
+    // A measured value is a marker only. Shaded track always means "somewhere in this range".
+    parts.push(`<span class="g-mark" style="left:${pct(b.lo)}"></span>`);
   }
   const track = `<span class="g-track ${b ? '' : 'unknown'}">${parts.join('')}</span>`;
   if (size === 'mini') return `<span class="gauge mini" role="img" aria-label="${ariaText(v, k)}">${track}</span>`;

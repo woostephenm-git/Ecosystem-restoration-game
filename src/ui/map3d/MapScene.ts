@@ -764,18 +764,9 @@ export class MapScene {
     this.arrows.visible = false;
     this.scene.add(this.arrows);
 
-    // A screen of posts across the inlet, shown once the carp barrier is built.
+    // A screen of posts across the inlet, shown once the carp barrier is built. Its posts are
+    // laid out bank to bank in placeBarrier, since the channel widens as the pond rises.
     this.barrierMesh = new THREE.Group();
-    const postMat = new THREE.MeshLambertMaterial({ color: 0x4a4a52 });
-    for (let k = 0; k < 7; k++) {
-      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.5, 5), postMat);
-      post.position.set(0, 0.1, (k - 3) * 0.1);
-      post.castShadow = true;
-      this.barrierMesh.add(post);
-    }
-    const rail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.66), postMat);
-    rail.position.set(0, 0.3, 0);
-    this.barrierMesh.add(rail);
     this.barrierMesh.visible = false;
     this.scene.add(this.barrierMesh);
 
@@ -923,16 +914,7 @@ export class MapScene {
     this.arrows.geometry = ag;
     this.arrows.visible = v.flowOverlay;
 
-    // Barrier at the inlet face.
-    const inlet = v.boundaries.find((b) => b.kind === 'in');
-    this.barrierMesh.visible = !!inlet && v.barrier !== 'none';
-    if (inlet && this.barrierMesh.visible) {
-      const t = v.tiles[this.tileIndex.get(inlet.tile)!];
-      const e = this.crossing(t, inlet.face);
-      this.barrierMesh.position.set(e.x - this.HALF, this.WL, e.z - this.HALF);
-      this.barrierMesh.rotation.y = this.acrossChannel(e.x, e.z, inlet.face);
-      this.barrierMesh.scale.setScalar(v.barrier === 'building' ? 0.6 : 1);
-    }
+    this.placeBarrier(v);
 
     this.placeWeir(v);
     this.placeBales(v);
@@ -951,6 +933,57 @@ export class MapScene {
           }${b.kind === 'out' ? weirNote : ''}</div>`,
       )
       .join('');
+  }
+
+  /* ---------------- Carp barrier ---------------- */
+  private barrierKey = '';
+  private postMat = new THREE.MeshLambertMaterial({ color: 0x4a4a52 });
+  private postGeo = new THREE.CylinderGeometry(0.02, 0.02, 1, 5).translate(0, -0.15, 0);
+
+  /**
+   * A screen of posts square across the inlet channel, from bank to bank at today's water
+   * level (the channel widens when the weir raises the pond). While it is being built, the
+   * posts reach part way across and the top rail is not on yet.
+   */
+  private placeBarrier(v: MapViewState) {
+    const m = this.barrierMesh;
+    const inlet = v.boundaries.find((b) => b.kind === 'in');
+    m.visible = !!inlet && v.barrier !== 'none';
+    if (!inlet || !m.visible) return;
+    const t = v.tiles[this.tileIndex.get(inlet.tile)!];
+    const e = this.crossing(t, inlet.face);
+    const rot = this.acrossChannel(e.x, e.z, inlet.face);
+    // Local z runs across the channel; walk it each way until the bed rises out of the water.
+    const ax = Math.sin(rot), az = Math.cos(rot);
+    const reach = (sgn: number) => {
+      let d = 0;
+      while (d < 3 && this.H(e.x + sgn * ax * (d + 0.04), e.z + sgn * az * (d + 0.04)) < this.WL) d += 0.04;
+      return d + 0.1; // set the end posts into the bank
+    };
+    const z0 = -reach(-1), z1 = reach(1);
+    const building = v.barrier === 'building';
+    const key = `${z0.toFixed(2)}|${z1.toFixed(2)}|${building}`;
+    m.position.set(e.x - this.HALF, this.WL, e.z - this.HALF);
+    m.rotation.y = rot;
+    if (key === this.barrierKey) return;
+    this.barrierKey = key;
+    for (const c of [...m.children]) {
+      m.remove(c);
+      if (c instanceof THREE.Mesh && c.geometry !== this.postGeo) c.geometry.dispose();
+    }
+    const end = building ? z0 + (z1 - z0) * 0.55 : z1;
+    const n = Math.max(2, Math.round((end - z0) / 0.1));
+    for (let k = 0; k <= n; k++) {
+      const post = new THREE.Mesh(this.postGeo, this.postMat);
+      post.position.set(0, 0, z0 + ((end - z0) * k) / n);
+      post.castShadow = true;
+      m.add(post);
+    }
+    if (!building) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, z1 - z0), this.postMat);
+      rail.position.set(0, 0.3, (z0 + z1) / 2);
+      m.add(rail);
+    }
   }
 
   /* ---------------- Outlet weir ---------------- */
