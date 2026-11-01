@@ -3,6 +3,7 @@ import { Game } from '../sim/game';
 import './styles.css';
 import { MapScene } from './map3d/MapScene';
 import { mapViewState, renderMap } from './mapView';
+import { renderDebrief, wireDebrief } from './debriefView';
 import { renderTile, type UiState } from './view';
 
 const MISSION = 'm01_clearwater_pond';
@@ -36,6 +37,7 @@ const ui: UiState = {
   speed: 0,
   showBriefing: true,
   showOutcome: false,
+  debrief: { tile: 'median', slots: ['plant_cover', 'carp', 'secchi', null], table: false },
 };
 
 const root = document.getElementById('app')!;
@@ -107,7 +109,8 @@ function draw() {
   const focused = (document.activeElement as HTMLElement | null)?.dataset?.action;
   const scroll = root.querySelector('.xsec-scroll')?.scrollLeft ?? 0;
   const canvasFocused = !!scene && scene.element.contains(document.activeElement);
-  root.innerHTML = ui.screen === 'map' ? renderMap(game, ui) : renderTile(game, ui);
+  root.innerHTML = ui.screen === 'map' ? renderMap(game, ui) : ui.screen === 'debrief' ? renderDebrief(game, ui) : renderTile(game, ui);
+  if (ui.screen === 'debrief') wireDebrief(root, game);
   const xs = root.querySelector('.xsec-scroll');
   if (xs) xs.scrollLeft = scroll;
   if (ui.screen === 'map') {
@@ -125,9 +128,9 @@ function setDrawer(open: boolean) {
   root.querySelector('.drawer-tab')?.setAttribute('aria-expanded', String(open));
 }
 
-/** Light theme on the map, ochre in the investigation view. */
+/** Ochre in the investigation view, light everywhere else. */
 function theme() {
-  document.documentElement.dataset.theme = ui.screen === 'map' ? 'light' : 'ochre';
+  document.documentElement.dataset.theme = ui.screen === 'tile' ? 'ochre' : 'light';
 }
 
 function advance(days: number) {
@@ -192,13 +195,48 @@ root.addEventListener('click', (e) => {
     case 'outcome-close':
       ui.showOutcome = false;
       break;
+    case 'debrief':
+      ui.showOutcome = false;
+      ui.speed = 0;
+      ui.screen = 'debrief';
+      setDrawer(false);
+      window.scrollTo(0, 0);
+      break;
   }
   draw();
 });
 
+// Debrief filters: the tile drop-down and the variable check boxes.
+root.addEventListener('change', (e) => {
+  const el = (e.target as HTMLElement).closest<HTMLElement>('[data-change]');
+  if (!el) return;
+  const [action, arg] = el.dataset.change!.split(':');
+  const db = ui.debrief;
+  if (action === 'db-tile') db.tile = (el as HTMLSelectElement).value;
+  if (action === 'db-var') {
+    const k = db.slots.indexOf(arg);
+    if (k >= 0) db.slots[k] = null;
+    else {
+      // A new variable takes the first free slot; the others keep their colours.
+      const free = db.slots.indexOf(null);
+      if (free >= 0) db.slots[free] = arg;
+    }
+  }
+  draw();
+  (root.querySelector(`[data-change="${CSS.escape(el.dataset.change!)}"]`) as HTMLElement | null)?.focus();
+});
+root.addEventListener(
+  'toggle',
+  (e) => {
+    const el = e.target as HTMLElement;
+    if (el.dataset?.toggle === 'db-table') ui.debrief.table = (el as HTMLDetailsElement).open;
+  },
+  true,
+);
+
 document.addEventListener('keydown', (e) => {
   const el = e.target as Element;
-  if (e.key === 'Backspace' && ui.screen === 'tile' && !(el instanceof HTMLInputElement)) {
+  if (e.key === 'Backspace' && ui.screen !== 'map' && !(el instanceof HTMLInputElement) && !(el instanceof HTMLSelectElement)) {
     ui.screen = 'map';
     draw();
     return;
@@ -223,7 +261,7 @@ function frame() {
   const dt = Math.min(1, (now - last) / 1000);
   last = now;
   const rate = DAYS_PER_SECOND[ui.speed];
-  if (rate && !ui.showBriefing && !ui.showOutcome) {
+  if (rate && !ui.showBriefing && !ui.showOutcome && ui.screen !== 'debrief') {
     carry += dt * rate;
     const days = Math.floor(carry);
     if (days > 0) {

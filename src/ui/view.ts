@@ -9,7 +9,7 @@ import { DRAW_W, ZONE_H, drawTile } from './drawing';
 import { gauge } from './gauge';
 
 export interface UiState {
-  screen: 'map' | 'tile';
+  screen: 'map' | 'tile' | 'debrief';
   /** Selected tile on the map, and the tile open in the investigation view. */
   tileId: string;
   layer: string;
@@ -23,6 +23,8 @@ export interface UiState {
   speed: 0 | 1 | 4;
   showBriefing: boolean;
   showOutcome: boolean;
+  /** Debrief chart: a pond tile or the median of all of them, and up to four variables in fixed colour slots. */
+  debrief: { tile: string; slots: (string | null)[]; table: boolean };
 }
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -122,23 +124,29 @@ export function header(game: Game, ui: UiState): string {
   const speedBtn = (speed: 0 | 1 | 4, label: string, ic: string) =>
     `<button type="button" class="btn time ${ui.speed === speed ? 'on' : ''}" data-action="speed:${speed}" aria-pressed="${ui.speed === speed}">${ic}<span>${label}</span></button>`;
   const onMap = ui.screen === 'map';
+  const onDebrief = ui.screen === 'debrief';
   const tile = game.sim.grid.tiles[game.sim.grid.indexOf(ui.tileId)];
-  const title = onMap ? `${esc(game.mission.title)} · Map` : `Tile ${esc(ui.tileId)} · ${esc(tile.description)}`;
+  const title = onMap ? `${esc(game.mission.title)} · Map` : onDebrief ? 'Debrief' : `Tile ${esc(ui.tileId)} · ${esc(tile.description)}`;
+  // Time stands still on the debrief, so the chart can be read and hovered.
+  const time = onDebrief
+    ? ''
+    : `<div class="time-controls" role="group" aria-label="Time controls">
+      ${speedBtn(0, 'Pause', icon.pause)}
+      ${speedBtn(1, '1 week/s', icon.play)}
+      ${speedBtn(4, '1 month/s', icon.fast)}
+      <button type="button" class="btn time" data-action="step">${icon.step}<span>+1 week</span></button>
+    </div>
+    <div class="sep"></div>`;
   return `<header class="top">
     ${onMap ? '' : `<button type="button" class="btn" data-action="back-to-map">${icon.back}<span>Back to map</span></button>`}
     <div class="title">
       <div class="t1">${title}</div>
       <div class="t2">Mission 1: ${esc(game.mission.title)} · ${cal.label}</div>
     </div>
-    ${onMap ? '' : tileSwitcher(game, ui)}
+    ${onMap || onDebrief ? '' : tileSwitcher(game, ui)}
     <div class="grow"></div>
-    <div class="time-controls" role="group" aria-label="Time controls">
-      ${speedBtn(0, 'Pause', icon.pause)}
-      ${speedBtn(1, '1 week/s', icon.play)}
-      ${speedBtn(4, '1 month/s', icon.fast)}
-      <button type="button" class="btn time" data-action="step">${icon.step}<span>+1 week</span></button>
-    </div>
-    <div class="sep"></div>
+    ${game.outcome && !onDebrief ? `<button type="button" class="btn" data-action="debrief">Debrief</button><div class="sep"></div>` : ''}
+    ${time}
     <div class="stat"><div class="k">Budget</div><div class="v mono">${fmtMoney(game.budget)}</div></div>
     <div class="sep"></div>
     <div class="stat"><div class="k">Samples taken</div><div class="v mono">${game.samplesTaken}</div></div>
@@ -501,7 +509,10 @@ function outcomeModal(game: Game): string {
         <p class="muted">Three years on, the clear-water state is holding. Here is what changed.</p>
         ${surveyTable(game)}
         ${letter(game)}
-        <button type="button" class="btn primary" data-action="outcome-close">Keep exploring the pond</button>
+        <div class="modal-actions">
+          <button type="button" class="btn primary" data-action="debrief">Open the debrief</button>
+          <button type="button" class="btn" data-action="outcome-close">Keep exploring the pond</button>
+        </div>
       </div></div>`;
   }
   const v = game.data.variables.get(game.mission.objective.variable)!;
@@ -511,7 +522,10 @@ function outcomeModal(game: Game): string {
     <p>Final survey: <span class="mono">${fmt(v, o.value)}${v.unit}</span> ${esc(v.name.toLowerCase())} against a target of <span class="mono">${fmt(v, o.target)}${v.unit}</span>.</p>
     ${surveyTable(game)}
     <p class="muted">You can keep running the pond to see what would have worked, but the mission is scored.</p>
-    <button type="button" class="btn primary" data-action="outcome-close">Keep exploring</button>
+    <div class="modal-actions">
+      <button type="button" class="btn primary" data-action="debrief">Open the debrief</button>
+      <button type="button" class="btn" data-action="outcome-close">Keep exploring</button>
+    </div>
   </div></div>`;
 }
 

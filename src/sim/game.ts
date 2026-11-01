@@ -39,6 +39,15 @@ export interface GameOptions {
   budget?: number;
 }
 
+/** One intervention as the debrief shows it: everything of one kind started on one day. */
+export interface DebriefEvent {
+  id: string;
+  name: string;
+  day: number;
+  duration: number;
+  tiles: string[];
+}
+
 export interface Availability {
   ok: boolean;
   reason?: string;
@@ -70,6 +79,11 @@ export class Game {
   /** Sampling done, keyed by tile then method, holding the mission day it was last done. */
   private readonly sampled = new Map<string, Map<string, number>>();
   readonly interventionsDone: { id: string; day: number; tileId: string }[] = [];
+  /**
+   * True daily values on every pond tile, for the debrief. `days[k]` is the mission day of
+   * entry k in each series; tiles that joined the pond later (flooding) are NaN before they did.
+   */
+  readonly history = { days: [] as number[], values: new Map<string, Map<string, number[]>>() };
   samplesTaken = 0;
   outcome: Outcome | null = null;
   /** True pond-wide means when the mission clock started, for before-and-after comparison. */
@@ -89,6 +103,7 @@ export class Game {
     this.sim.restore(spunUp(data, mission));
     this.knowledge = new Knowledge(this.sim, mission.measurement_fresh_days, new Rng(seed).fork(2));
     this.startSurvey = this.survey();
+    this.record();
   }
 
   get day(): number {
@@ -227,6 +242,7 @@ export class Game {
         this.log.push({ day: this.day, kind: 'event', text: `${this.data.interventions.get(id)!.name}${on} completed` });
       }
       this.knowledge.observe();
+      this.record();
       if (!this.outcome && this.day >= this.deadlineDay) this.evaluateOutcome();
     }
   }
@@ -258,6 +274,44 @@ export class Game {
 
   isDiscovered(link: NormalLink): boolean {
     return link.discovered_by.every((id) => this.measuredEver(id));
+  }
+
+  /** Append today's true value of every visible variable on every pond tile to the history. */
+  private record() {
+    const h = this.history;
+    const n = h.days.length;
+    h.days.push(this.day);
+    for (const v of this.visibleVariables()) {
+      let byTile = h.values.get(v.id);
+      if (!byTile) h.values.set(v.id, (byTile = new Map()));
+      for (const id of this.waterTileIds()) {
+        let series = byTile.get(id);
+        if (!series) byTile.set(id, (series = new Array<number>(n).fill(NaN)));
+        series.push(this.sim.tile(id).values[v.id]);
+      }
+    }
+  }
+
+  /** Daily true values of a variable on one tile, or the median over pond tiles each day. */
+  historySeries(variableId: string, tile: string | 'median'): number[] {
+    const byTile = this.history.values.get(variableId);
+    if (!byTile) return [];
+    if (tile !== 'median') return byTile.get(tile) ?? [];
+    const all = [...byTile.values()];
+    return this.history.days.map((_, k) => median(all.map((s) => s[k]).filter((x) => Number.isFinite(x))));
+  }
+
+  /** Interventions for the debrief, grouped by kind and start day (six plantings on one day are one event). */
+  debriefEvents(): DebriefEvent[] {
+    const groups = new Map<string, DebriefEvent>();
+    for (const d of this.interventionsDone) {
+      const key = `${d.id}@${d.day}`;
+      const iv = this.data.interventions.get(d.id)!;
+      const e = groups.get(key) ?? { id: d.id, name: iv.name, day: d.day, duration: iv.duration_days, tiles: [] };
+      if (iv.scope === 'tile') e.tiles.push(d.tileId);
+      groups.set(key, e);
+    }
+    return [...groups.values()].sort((a, b) => a.day - b.day || a.name.localeCompare(b.name));
   }
 
   /** Variables shown in this mission: enabled layers, not boundary inputs. */
@@ -373,4 +427,11 @@ export class Game {
   objectiveKnown(tileId: string): Known {
     return this.known(tileId, this.mission.objective.variable);
   }
+}
+
+function median(xs: number[]): number {
+  if (!xs.length) return NaN;
+  const s = xs.slice().sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }

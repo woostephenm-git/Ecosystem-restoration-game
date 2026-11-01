@@ -1495,3 +1495,314 @@ button:focus-visible {
     transition: none;
   }
 }
+
+/* Debrief: the whole mission on one chart */
+.modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.debrief {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 44px 24px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.db-head h1 {
+  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 600;
+}
+.db-head p {
+  margin: 4px 0 0;
+  line-height: 1.5;
+}
+.db-head .banner {
+  margin-right: 8px;
+}
+.banner.fail {
+  background: var(--st-limiting);
+}
+.db-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  align-items: flex-start;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.db-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.db-tile select {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  max-width: 280px;
+}
+.db-vars {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.db-vars legend {
+  padding: 0;
+  margin-bottom: 4px;
+  width: 100%;
+}
+.db-var {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+}
+.db-var.on {
+  border-color: var(--hover-border);
+  background: var(--card);
+}
+.db-var.off {
+  color: var(--dim);
+  cursor: default;
+}
+.db-var input {
+  margin: 0;
+}
+.db-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+.db-figure {
+  margin: 0;
+  padding: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.db-figure figcaption {
+  line-height: 1.5;
+}
+.db-empty {
+  margin: 0;
+  color: var(--muted);
+}
+.db-plot {
+  position: relative;
+}
+.db-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--sans);
+}
+.db-chart .grid {
+  stroke: var(--border-soft);
+}
+.db-chart .tick {
+  stroke: var(--dash);
+}
+.db-chart .axis {
+  fill: var(--muted);
+  font-size: 12px;
+}
+.db-chart .deadline {
+  stroke: var(--text-2);
+  stroke-dasharray: 2 3;
+}
+.db-chart .span {
+  fill: var(--text);
+  opacity: 0.045;
+}
+.db-chart .event {
+  stroke: var(--dim);
+  stroke-dasharray: 4 3;
+}
+.db-chart .marker circle {
+  fill: var(--panel);
+  stroke: var(--text-2);
+  stroke-width: 1.5;
+}
+.db-chart .marker text {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+.db-chart .line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.db-chart .end {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+}
+.db-chart .endval {
+  fill: var(--muted);
+  font-size: 11px;
+  font-family: var(--mono);
+}
+.db-chart .cross {
+  stroke: var(--text-2);
+  stroke-width: 1;
+}
+.db-chart .dot {
+  stroke: var(--panel);
+  stroke-width: 2;
+}
+.db-chart .hit {
+  fill: transparent;
+  cursor: crosshair;
+}
+.db-tip {
+  position: absolute;
+  pointer-events: none;
+  min-width: 200px;
+  max-width: 300px;
+  padding: 8px 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.db-tip[hidden] {
+  display: none;
+}
+.tip-date {
+  color: var(--muted);
+}
+.tip-row {
+  display: grid;
+  grid-template-columns: 10px 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+.tip-active {
+  border-top: 1px solid var(--border-soft);
+  padding-top: 4px;
+  color: var(--text-2);
+}
+.db-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  font-size: 13px;
+}
+.db-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.db-events,
+.db-table {
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.db-events h2 {
+  margin: 0 0 8px;
+  font-weight: 500;
+}
+.db-events ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.db-events li {
+  display: grid;
+  grid-template-columns: 24px auto 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+.db-events li > .mono {
+  white-space: nowrap;
+  min-width: 128px;
+}
+.db-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+}
+.db-table summary {
+  cursor: pointer;
+}
+.db-table-scroll {
+  overflow-x: auto;
+  margin-top: 10px;
+}
+.db-table table {
+  border-collapse: collapse;
+  font-size: 13px;
+  min-width: 100%;
+}
+.db-table th,
+.db-table td {
+  text-align: right;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+.db-table th:first-child {
+  text-align: left;
+}
+.db-table thead th {
+  color: var(--muted);
+  font-weight: 500;
+}
+@media (max-width: 640px) {
+  .debrief {
+    padding: 44px 16px 32px;
+  }
+  .db-events li {
+    grid-template-columns: 24px 1fr;
+  }
+  .db-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .db-tile select {
+    max-width: none;
+  }
+}

@@ -32,7 +32,7 @@ src/sim/              headless simulation core: no DOM, no rendering
   game.ts             budget, sampling, interventions, link discovery, limiting factors, hints, outcome
 src/ui/               map screen and investigation view (vanilla TypeScript, renders from Game)
   map3d/              Three.js map, ported from the Marsh Specimen Bench artifact
-tests/                vitest: function library, loader, engine, grid, knowledge, outcome, Mission 1 scenarios
+tests/                vitest: function library, loader, engine, grid, knowledge, outcome, debrief, Mission 1 scenarios
 scripts/              map generation, tuning and profiling helpers
 ```
 
@@ -83,6 +83,7 @@ These were marked Open or Proposed in the design doc, or decided in review. Each
 - **Pond level and flooding:** raising the outlet weir lifts the pond surface (the `weir_rise` boundary variable). Every pond tile deepens, and land bordering the pond floods once under more than 10 cm of water. Flooded meadow joins the pond as bare, fish-free shallows with a phosphorus pulse from rewetted soil, and the flow solver is rebuilt for the new shape. Raising the weir by 30 cm floods six tiles. The 3D water surface follows the gauges.
 - **Structures:** the outlet has a stone sill. Raising the weir shows scaffolding while the wall grows, then water spilling over the higher crest. The carp barrier stands across the inlet channel.
 - **Map views:** a "Show" drop-down under Reset view picks the surface view, water flow, or a knowledge overlay.
+- **Debrief:** after the deadline, the outcome screen and the top bar open a debrief. It plots the true daily values (not the player's measurements) for one pond tile or the median of all pond tiles, up to four variables at once. Each line is placed on its variable's typical range so they share one low/mid/high axis; hovering gives real values. Interventions are numbered markers with their duration shaded, listed under the chart, and the data is available as a monthly table. Time pauses while it is open.
 - **Mission drawer:** the objective, weather and inflow (the boundary conditions) and the field log slide down from a tab under the top bar, which summarises the objective while closed.
 
 ## Model notes
