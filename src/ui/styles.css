@@ -1930,3 +1930,9 @@ button:focus-visible {
 .fund-note {
   color: var(--warn-text);
 }
+
+.dec-problems {
+  margin: 0;
+  padding-left: 20px;
+  line-height: 1.5;
+}

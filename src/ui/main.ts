@@ -39,6 +39,7 @@ const ui: UiState = {
   showOutcome: false,
   debrief: { tile: 'median', slots: ['plant_cover', 'carp', 'secchi', null], table: false },
   funding: { open: false, arrows: [], pick: null },
+  decision: null,
 };
 
 const root = document.getElementById('app')!;
@@ -136,10 +137,20 @@ function theme() {
 
 function advance(days: number) {
   const hadOutcome = !!game.outcome;
-  game.advance(days);
+  const decided = game.applications.filter((a) => a.resolved).length;
+  // One day at a time, so time stops on the day a decision or the deadline arrives.
+  for (let d = 0; d < days; d++) {
+    game.advance(1);
+    if ((!hadOutcome && game.outcome) || game.applications.filter((a) => a.resolved).length > decided) break;
+  }
   if (!hadOutcome && game.outcome) {
     ui.speed = 0;
     ui.showOutcome = true;
+  }
+  // A funding decision pauses time and shows the council's reply.
+  if (game.applications.filter((a) => a.resolved).length > decided) {
+    ui.speed = 0;
+    ui.decision = game.applications.length - 1;
   }
 }
 
@@ -195,6 +206,9 @@ root.addEventListener('click', (e) => {
       break;
     case 'outcome-close':
       ui.showOutcome = false;
+      break;
+    case 'decision-close':
+      ui.decision = null;
       break;
     case 'funding-open':
       ui.funding = { open: true, arrows: [], pick: null };
@@ -278,8 +292,9 @@ document.addEventListener('keydown', (e) => {
     el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     return;
   }
-  if (e.key === 'Escape' && ui.funding.open) {
+  if (e.key === 'Escape' && (ui.funding.open || ui.decision !== null)) {
     ui.funding.open = false;
+    ui.decision = null;
     draw();
     return;
   }
@@ -303,7 +318,7 @@ function frame() {
   const dt = Math.min(1, (now - last) / 1000);
   last = now;
   const rate = DAYS_PER_SECOND[ui.speed];
-  if (rate && !ui.showBriefing && !ui.showOutcome && !ui.funding.open && ui.screen !== 'debrief') {
+  if (rate && !ui.showBriefing && !ui.showOutcome && !ui.funding.open && ui.decision === null && ui.screen !== 'debrief') {
     carry += dt * rate;
     const days = Math.floor(carry);
     if (days > 0) {

@@ -1,6 +1,6 @@
 // Funding application: the player draws what limits plant establishment, two steps deep,
 // using only variables they have sampled. The game judges it; the decision arrives later.
-import { fmtMoney } from '../sim/format';
+import { calendar, fmtMoney } from '../sim/format';
 import type { Game } from '../sim/game';
 import { esc, type UiState } from './view';
 
@@ -138,6 +138,28 @@ export function fundingModal(game: Game, ui: UiState): string {
       <button type="button" class="btn" data-action="funding-clear" ${arrows.length ? '' : 'disabled'}>Clear arrows</button>
       <button type="button" class="btn" data-action="funding-close">Cancel</button>
     </div>
+  </div></div>`;
+}
+
+/** The council's reply, shown when a decision arrives. Time stays paused until it is closed. */
+export function decisionModal(game: Game, index: number): string {
+  const f = game.mission.funding!;
+  const app = game.applications[index];
+  const name = (id: string) => (id === f.target ? f.target_name : game.data.variables.get(id)!.name);
+  const chain = app.chain ? [...app.chain, f.target].map(name).join(' → ') : '';
+  const body = app.success
+    ? `<div class="banner">Approved</div>
+       <h1 id="dec-title">Funding approved</h1>
+       <p>The reviewers accepted your case: <strong>${esc(chain)}</strong>. <span class="mono">${fmtMoney(f.grant)}</span> has been added to your budget.</p>`
+    : `<div class="banner fail">Declined</div>
+       <h1 id="dec-title">Funding declined</h1>
+       <p>The council will not fund this application. No money has been added.</p>
+       <ul class="dec-problems">${app.problems.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>
+       <p class="muted small">You can apply again with a different case.</p>`;
+  return `<div class="modal-back"><div class="modal decision" role="dialog" aria-modal="true" aria-labelledby="dec-title">
+    <div class="label">Parish council environment fund · reply to your application of ${esc(calendar(app.day, game.mission.start.day_of_year).label)}</div>
+    ${body}
+    <div class="modal-actions"><button type="button" class="btn primary" data-action="decision-close">Back to the pond</button></div>
   </div></div>`;
 }
 

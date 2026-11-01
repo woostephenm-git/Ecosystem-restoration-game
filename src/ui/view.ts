@@ -6,7 +6,7 @@ import type { Known } from '../sim/knowledge';
 import type { NormalLink } from '../sim/loader';
 import type { Variable } from '../sim/schema';
 import { DRAW_W, ZONE_H, drawTile } from './drawing';
-import { fundingButton, fundingModal } from './fundingView';
+import { decisionModal, fundingButton, fundingModal } from './fundingView';
 import { gauge } from './gauge';
 
 export interface UiState {
@@ -28,6 +28,8 @@ export interface UiState {
   debrief: { tile: string; slots: (string | null)[]; table: boolean };
   /** The funding application pop-up: arrows drawn so far, and the node an arrow is being drawn from. */
   funding: { open: boolean; arrows: [string, string][]; pick: string | null };
+  /** A funding decision that has just arrived (index into game.applications), shown until closed. */
+  decision: number | null;
 }
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -97,7 +99,7 @@ export function renderTile(game: Game, ui: UiState): string {
 }
 
 export function modals(game: Game, ui: UiState): string {
-  return `${ui.showBriefing ? briefing(game) : ''}${ui.showOutcome && game.outcome ? outcomeModal(game) : ''}${ui.funding.open && game.mission.funding ? fundingModal(game, ui) : ''}`;
+  return `${ui.showBriefing ? briefing(game) : ''}${ui.showOutcome && game.outcome ? outcomeModal(game) : ''}${ui.funding.open && game.mission.funding ? fundingModal(game, ui) : ''}${ui.decision !== null ? decisionModal(game, ui.decision) : ''}`;
 }
 
 /** A small clickable copy of the grid, for jumping between tiles in the investigation view. */
