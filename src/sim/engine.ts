@@ -356,6 +356,12 @@ export class Simulation {
     return [...new Set(this.effects.map((e) => `${e.interventionId}@${e.tiles?.join(',') ?? '*'}`))];
   }
 
+  /** How far a running intervention has got, 0 to 1, or null when it is not running. */
+  interventionProgress(interventionId: string): number | null {
+    const e = this.effects.find((x) => x.interventionId === interventionId);
+    return e ? 1 - e.daysLeft / e.duration : null;
+  }
+
   activeInterventions(tileId?: string): string[] {
     const relevant = this.effects.filter((e) => !tileId || !e.tiles || e.tiles.includes(tileId));
     return [...new Set(relevant.map((e) => e.interventionId))];

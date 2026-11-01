@@ -58,6 +58,13 @@ export interface MapViewState {
   runoff: (number | null)[];
   boundaries: { tile: string; face: 'N' | 'E' | 'S' | 'W'; name: string; kind: 'in' | 'out' }[];
   barrier: 'none' | 'building' | 'built';
+  /** How far the pond surface sits above its original level, from gauged depths (m). */
+  waterRise: number;
+  /** The outlet weir: how far it has been raised (m) and whether work is under way. */
+  weir: { raisedBy: number; building: boolean; progress: number };
+  /** The "Show" drop-down: which view is on, and what can be picked. */
+  overlay: string;
+  overlayOptions: { id: string; label: string; group: string }[];
 }
 
 export interface MapCallbacks {
@@ -65,6 +72,8 @@ export interface MapCallbacks {
   onSelect(tileIds: string[], mode: 'replace' | 'add'): void;
   /** Double-click or Enter on a tile. */
   onOpen(tileId: string): void;
+  /** A view was picked from the "Show" drop-down. */
+  onOverlay(id: string): void;
 }
 
 const VIEW_H = 15.5;
@@ -81,7 +90,9 @@ export class MapScene {
   private readonly canvas: HTMLCanvasElement;
   private readonly N: number;
   private readonly HALF: number;
-  private readonly WL: number;
+  /** Current water surface: the terrain's level plus any rise from raising the weir. */
+  private WL: number;
+  private readonly baseWL: number;
   private readonly shared;
   private readonly sun: THREE.DirectionalLight;
   private view: MapViewState | null = null;
@@ -98,7 +109,7 @@ export class MapScene {
   ) {
     this.N = terrain.playable;
     this.HALF = this.N / 2;
-    this.WL = terrain.water_level;
+    this.WL = this.baseWL = terrain.water_level;
     this.shared = sharedUniforms(this.HALF);
 
     this.element = document.createElement('div');
@@ -108,8 +119,11 @@ export class MapScene {
       <div class="hud" aria-live="polite"><div class="hud-tile">Hover or use arrow keys to inspect a tile</div><div class="hud-info">Shows observable state only</div></div>
       <div class="map-hint">Drag to rotate · Scroll to zoom · Click a tile, click again to investigate · Shift-drag to select an area</div>
       <div class="map-tools">
-        <button type="button" class="btn small" data-map="reset">Reset view</button>
-        <button type="button" class="btn small" data-map="quality" aria-pressed="false">Graphics: high</button>
+        <div class="map-tools-row">
+          <button type="button" class="btn small" data-map="reset">Reset view</button>
+          <button type="button" class="btn small" data-map="quality" aria-pressed="false">Graphics: high</button>
+        </div>
+        <label class="map-show"><span>Show</span><select data-map="overlay"></select></label>
       </div>
       <div class="compass" aria-hidden="true"><svg viewBox="-32 -32 64 64">
         <circle r="17" fill="none" stroke="#56666c" stroke-opacity="0.45" stroke-width="1"/>
@@ -230,7 +244,12 @@ export class MapScene {
     this.terrainMesh = mesh;
     this.scene.add(mesh);
 
-    // Colour by height above the water, as the bench does.
+    this.recolorTerrain();
+  }
+
+  /** Colour by height above the water, as the bench does. Reruns when the water level changes. */
+  private recolorTerrain() {
+    const HALF = this.HALF, geo = this.terrainGeo;
     const p = geo.attributes.position.array, c = geo.attributes.color as THREE.BufferAttribute, nrm = geo.attributes.normal.array;
     const col = new THREE.Color();
     for (let f = 0; f < p.length / 9; f++) {
@@ -701,34 +720,15 @@ export class MapScene {
   private labels!: HTMLDivElement;
 
   private buildMarkers() {
-    const N = this.N, HALF = this.HALF;
+    const N = this.N;
     // Tile grid and the bright playable border, draped on the surface.
-    const p: number[] = [];
-    const st = 0.25;
-    for (let i = 0; i <= N; i++)
-      for (let s = 0; s < N; s += st) {
-        p.push(i - HALF, this.surfY(i, s), s - HALF, i - HALF, this.surfY(i, s + st), s + st - HALF);
-        p.push(s - HALF, this.surfY(s, i), i - HALF, s + st - HALF, this.surfY(s + st, i), i - HALF);
-      }
-    const gg = new THREE.BufferGeometry();
-    gg.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
-    this.grid = new THREE.LineSegments(gg, new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }));
+    this.grid = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.22, depthWrite: false }));
     this.grid.renderOrder = 4;
     this.scene.add(this.grid);
-    const b: number[] = [];
-    const w = 0.045, sy = (x: number, z: number) => this.surfY(x, z) + 0.025;
-    const sides = [[0, 0, 1, 0, 0, 1], [N, 0, 0, 1, -1, 0], [N, N, -1, 0, 0, -1], [0, N, 0, -1, 1, 0]];
-    for (const [x0, z0, dx, dz, nx, nz] of sides)
-      for (let t = 0; t < N; t += 0.1) {
-        const ax = x0 + dx * t, az = z0 + dz * t, bx = x0 + dx * (t + 0.1), bz = z0 + dz * (t + 0.1);
-        const q = [[ax - nx * w, az - nz * w], [bx - nx * w, bz - nz * w], [bx + nx * w, bz + nz * w], [ax + nx * w, az + nz * w]];
-        for (const i of [0, 1, 2, 0, 2, 3]) b.push(q[i][0] - HALF, sy(q[i][0], q[i][1]), q[i][1] - HALF);
-      }
-    const bg = new THREE.BufferGeometry();
-    bg.setAttribute('position', new THREE.Float32BufferAttribute(b, 3));
-    const border = new THREE.Mesh(bg, new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
-    border.renderOrder = 1;
-    this.scene.add(border);
+    this.border = new THREE.Mesh(new THREE.BufferGeometry(), new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide }));
+    this.border.renderOrder = 1;
+    this.scene.add(this.border);
+    this.rebuildGrid();
 
     const loopMat = (color: number) => new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95, depthTest: false });
     this.hover = new THREE.LineLoop(new THREE.BufferGeometry(), loopMat(0xffffff));
@@ -778,6 +778,52 @@ export class MapScene {
     this.scene.add(this.barrierMesh);
 
     this.labels = this.element.querySelector('.map-labels')!;
+  }
+
+  private border!: THREE.Mesh;
+  /** Drape the grid and border on the surface; reruns when the water level changes. */
+  private rebuildGrid() {
+    const N = this.N, HALF = this.HALF;
+    const p: number[] = [];
+    const st = 0.25;
+    for (let i = 0; i <= N; i++)
+      for (let s = 0; s < N; s += st) {
+        p.push(i - HALF, this.surfY(i, s), s - HALF, i - HALF, this.surfY(i, s + st), s + st - HALF);
+        p.push(s - HALF, this.surfY(s, i), i - HALF, s + st - HALF, this.surfY(s + st, i), i - HALF);
+      }
+    const gg = new THREE.BufferGeometry();
+    gg.setAttribute('position', new THREE.Float32BufferAttribute(p, 3));
+    this.grid.geometry.dispose();
+    this.grid.geometry = gg;
+    const b: number[] = [];
+    const w = 0.045, sy = (x: number, z: number) => this.surfY(x, z) + 0.025;
+    const sides = [[0, 0, 1, 0, 0, 1], [N, 0, 0, 1, -1, 0], [N, N, -1, 0, 0, -1], [0, N, 0, -1, 1, 0]];
+    for (const [x0, z0, dx, dz, nx, nz] of sides)
+      for (let t = 0; t < N; t += 0.1) {
+        const ax = x0 + dx * t, az = z0 + dz * t, bx = x0 + dx * (t + 0.1), bz = z0 + dz * (t + 0.1);
+        const q = [[ax - nx * w, az - nz * w], [bx - nx * w, bz - nz * w], [bx + nx * w, bz + nz * w], [ax + nx * w, az + nz * w]];
+        for (const i of [0, 1, 2, 0, 2, 3]) b.push(q[i][0] - HALF, sy(q[i][0], q[i][1]), q[i][1] - HALF);
+      }
+    const bg = new THREE.BufferGeometry();
+    bg.setAttribute('position', new THREE.Float32BufferAttribute(b, 3));
+    this.border.geometry.dispose();
+    this.border.geometry = bg;
+  }
+
+  /**
+   * Where a channel crosses a tile face: the lowest point along a line `inset` tiles inside
+   * that edge (kept inside the playable square so structures are not greyed out with the backdrop).
+   */
+  private crossing(t: TileView, face: 'N' | 'E' | 'S' | 'W', inset = 0.3) {
+    let best = { x: 0, z: 0, h: Infinity };
+    for (let k = 0; k <= 40; k++) {
+      const u = k / 40;
+      const x = face === 'E' ? t.col + 1 - inset : face === 'W' ? t.col + inset : t.col + u;
+      const z = face === 'S' ? t.row + 1 - inset : face === 'N' ? t.row + inset : t.row + u;
+      const h = this.H(x, z);
+      if (h < best.h) best = { x, z, h };
+    }
+    return best;
   }
 
   private tileLoop(line: THREE.LineLoop, col: number, row: number) {
@@ -880,16 +926,96 @@ export class MapScene {
     this.barrierMesh.visible = !!inlet && v.barrier !== 'none';
     if (inlet && this.barrierMesh.visible) {
       const t = v.tiles[this.tileIndex.get(inlet.tile)!];
-      const e = this.faceMid(t, inlet.face);
+      const e = this.crossing(t, inlet.face);
       this.barrierMesh.position.set(e.x - this.HALF, this.WL, e.z - this.HALF);
       this.barrierMesh.rotation.y = inlet.face === 'N' || inlet.face === 'S' ? Math.PI / 2 : 0;
       this.barrierMesh.scale.setScalar(v.barrier === 'building' ? 0.6 : 1);
     }
 
+    this.placeWeir(v);
+
     // Boundary labels, positioned every frame.
+    const weirNote = v.weir.building
+      ? `<span>Weir being raised · ${Math.round(v.weir.progress * 100)}%</span>`
+      : v.weir.raisedBy > 0
+        ? `<span>Weir raised ${Math.round(v.weir.raisedBy * 100)} cm</span>`
+        : '';
     this.labels.innerHTML = v.boundaries
-      .map((b) => `<div class="map-label ${b.kind}" data-tile="${b.tile}" data-face="${b.face}">${b.kind === 'in' ? '→ ' : ''}${b.name}${b.kind === 'out' ? ' →' : ''}${b.kind === 'in' && v.barrier !== 'none' ? `<span>Carp barrier ${v.barrier === 'building' ? 'being built' : 'in place'}</span>` : ''}</div>`)
+      .map(
+        (b) =>
+          `<div class="map-label ${b.kind}" data-tile="${b.tile}" data-face="${b.face}">${b.kind === 'in' ? '→ ' : ''}${b.name}${b.kind === 'out' ? ' →' : ''}${
+            b.kind === 'in' && v.barrier !== 'none' ? `<span>Carp barrier ${v.barrier === 'building' ? 'being built' : 'in place'}</span>` : ''
+          }${b.kind === 'out' ? weirNote : ''}</div>`,
+      )
       .join('');
+  }
+
+  /* ---------------- Outlet weir ---------------- */
+  private weir: { group: THREE.Group; wall: THREE.Mesh; spill: THREE.Mesh; site: THREE.Group } | null = null;
+  private buildWeir() {
+    const group = new THREE.Group();
+    const stone = new THREE.MeshLambertMaterial({ color: 0xc9c2b0 });
+    // Unit-height wall, scaled to the crest each update. Runs along z (across an east or west face).
+    const wall = new THREE.Mesh(new THREE.BoxGeometry(0.13, 1, 0.78).translate(0, 0.5, 0), stone);
+    wall.castShadow = true;
+    wall.receiveShadow = true;
+    group.add(wall);
+    // A sheet of water spilling over the crest on the downstream side.
+    const spill = new THREE.Mesh(
+      new THREE.BoxGeometry(0.035, 1, 0.74).translate(0.08, -0.5, 0),
+      new THREE.MeshBasicMaterial({ color: COL.foam, transparent: true, opacity: 0.75 }),
+    );
+    group.add(spill);
+    // Building site: scaffold posts with rails, and orange fencing on the banks.
+    const site = new THREE.Group();
+    const timber = new THREE.MeshLambertMaterial({ color: 0x9a7a4e });
+    for (const z of [-0.42, -0.14, 0.14, 0.42]) {
+      for (const x of [-0.1, 0.1]) {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.9, 5).translate(0, 0.25, 0), timber);
+        post.position.set(x, 0, z);
+        post.castShadow = true;
+        site.add(post);
+      }
+    }
+    for (const x of [-0.1, 0.1]) {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.9), timber);
+      rail.position.set(x, 0.62, 0);
+      site.add(rail);
+    }
+    const fence = new THREE.MeshLambertMaterial({ map: fenceTexture() });
+    for (const z of [-0.62, 0.62]) {
+      const f = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.16, 0.02).translate(0, 0.08, 0), fence);
+      f.position.set(-0.05, 0, z);
+      site.add(f);
+    }
+    group.add(site);
+    // Exaggerated across the channel (not in height) so it reads at map zoom.
+    group.scale.set(1.6, 1, 1.6);
+    this.scene.add(group);
+    return (this.weir = { group, wall, spill, site });
+  }
+
+  /**
+   * The outlet always has a low stone sill holding the pond at its original level. Raising
+   * the weir builds the wall up (with scaffolding while work is under way), and once it is
+   * done the water spills over the higher crest.
+   */
+  private placeWeir(v: MapViewState) {
+    const w = this.weir ?? this.buildWeir();
+    const outlet = v.boundaries.find((b) => b.kind === 'out');
+    w.group.visible = !!outlet;
+    if (!outlet) return;
+    const t = v.tiles[this.tileIndex.get(outlet.tile)!];
+    const e = this.crossing(t, outlet.face);
+    const bed = this.H(e.x, e.z) - 0.04;
+    const crest = this.baseWL + 0.02 + v.weir.raisedBy;
+    w.group.position.set(e.x - this.HALF, bed, e.z - this.HALF);
+    w.group.rotation.y = { E: 0, W: Math.PI, N: Math.PI / 2, S: -Math.PI / 2 }[outlet.face];
+    w.wall.scale.y = Math.max(0.05, crest - bed);
+    w.spill.visible = !v.weir.building && this.WL >= crest - 0.03;
+    w.spill.position.y = crest - bed;
+    w.spill.scale.y = Math.max(0.05, crest - bed - 0.05);
+    w.site.visible = v.weir.building;
   }
 
   private faceMid(t: TileView, face: 'N' | 'E' | 'S' | 'W') {
@@ -907,6 +1033,17 @@ export class MapScene {
     if (first || prev!.tiles.length !== view.tiles.length) {
       this.tileIndex = new Map(view.tiles.map((t, i) => [t.id, i]));
       this.tileAtCache = new Map(view.tiles.map((t, i) => [`${t.row},${t.col}`, i]));
+    }
+    this.updateShowMenu(view);
+    // The water surface follows the gauges: raising the weir lifts it, and the shore with it.
+    const wl = this.baseWL + view.waterRise;
+    if (Math.abs(wl - this.WL) > 0.004) {
+      this.WL = wl;
+      this.waterU.uWaterLevel.value = wl;
+      this.recolorTerrain();
+      this.rebuildGrid();
+      this.lastCoverKey = '';
+      this.lastFishKey = '';
     }
     // Water colour per tile from visible clarity.
     let sum = 0, n = 0;
@@ -941,6 +1078,21 @@ export class MapScene {
   }
   private lastCoverKey = '';
   private lastFishKey = '';
+
+  private menuKey = '';
+  /** Fill the "Show" drop-down. Options are rebuilt only when they change, so an open list stays open. */
+  private updateShowMenu(view: MapViewState) {
+    const select = this.element.querySelector<HTMLSelectElement>('[data-map="overlay"]')!;
+    const key = view.overlayOptions.map((o) => o.id).join();
+    if (key !== this.menuKey) {
+      this.menuKey = key;
+      const groups = [...new Set(view.overlayOptions.map((o) => o.group))];
+      select.innerHTML = groups
+        .map((g) => `<optgroup label="${g}">${view.overlayOptions.filter((o) => o.group === g).map((o) => `<option value="${o.id}">${o.label}</option>`).join('')}</optgroup>`)
+        .join('');
+    }
+    if (select.value !== view.overlay) select.value = view.overlay;
+  }
 
   resetView() {
     this.camera.position.copy(START_CAMERA);
@@ -1072,6 +1224,7 @@ export class MapScene {
       }
     });
     this.element.querySelector('[data-map="reset"]')!.addEventListener('click', () => this.resetView());
+    this.element.querySelector<HTMLSelectElement>('[data-map="overlay"]')!.addEventListener('change', (ev) => this.cb.onOverlay((ev.target as HTMLSelectElement).value));
     this.element.querySelector('[data-map="quality"]')!.addEventListener('click', () => this.setLowQuality(!this.lowQuality));
   }
 
@@ -1302,3 +1455,17 @@ function solveSteadyFlow({ nx, nz, depth, isInflow, isOutflow, Q, h, iters = 900
   return { vx, vz, speedMax };
 }
 
+
+function fenceTexture() {
+  const c = document.createElement('canvas');
+  c.width = 64;
+  c.height = 16;
+  const g = c.getContext('2d')!;
+  for (let k = 0; k < 8; k++) {
+    g.fillStyle = k % 2 ? '#ffffff' : '#e8711c';
+    g.fillRect(k * 8, 0, 8, 16);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}

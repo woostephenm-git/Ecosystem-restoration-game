@@ -127,6 +127,17 @@ describe('simulation engine', () => {
     expect(sim.activeInterventions()).toEqual([]);
   });
 
+  it('reports how far a running intervention has got', () => {
+    const sim = new Simulation(data, mission, 1);
+    const weir = data.interventions.get('raise_weir')!;
+    expect(sim.interventionProgress('raise_weir')).toBeNull();
+    sim.startIntervention(weir);
+    sim.step(weir.duration_days / 2);
+    expect(sim.interventionProgress('raise_weir')).toBeCloseTo(0.5);
+    sim.step(weir.duration_days);
+    expect(sim.interventionProgress('raise_weir')).toBeNull();
+  });
+
   it('applies boundary interventions as persistent modifiers', () => {
     const sim = new Simulation(data, mission, 1);
     const base = sim.boundary.carp_immigration;

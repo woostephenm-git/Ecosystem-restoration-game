@@ -80,6 +80,9 @@ These were marked Open or Proposed in the design doc, or decided in review. Each
 - **Scales:** every variable has a typical range (`scale` in `data/variables.json`), with an optional reference mark. Gauges show low, mid or high by thirds of that range.
 - **Measurement staleness:** visual observations update daily. Coarse-visible variables fall back to a visual estimate 30 days after a measurement. Lab-only variables keep their last measurement and are tagged with their age.
 - **Themes:** light on the map, ochre in the investigation view.
+- **Water level on the map:** the 3D surface follows the gauged water depth, so raising the weir visibly lifts the pond (and floods low meadow, which the sim does not yet treat as pond).
+- **Structures:** the outlet has a stone sill. Raising the weir shows scaffolding while the wall grows, then water spilling over the higher crest. The carp barrier stands across the inlet channel.
+- **Map views:** a "Show" drop-down under Reset view picks the surface view, water flow, or a knowledge overlay.
 - **Mission drawer:** the objective, weather and inflow (the boundary conditions) and the field log slide down from a tab under the top bar, which summarises the objective while closed.
 
 ## Model notes

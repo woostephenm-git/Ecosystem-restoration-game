@@ -1294,7 +1294,42 @@ button:focus-visible {
   top: 10px;
   right: 10px;
   display: flex;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 6px;
+}
+.map-tools-row {
+  display: flex;
+  gap: 6px;
+}
+.map-show {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.map-show select {
+  height: 26px;
+  min-width: 190px;
+  border: none;
+  border-radius: 5px;
+  background: var(--card);
+  color: var(--text);
+  font: 500 12.5px var(--sans);
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+.map-show select:focus-visible {
+  outline: 2px solid var(--accent);
 }
 .btn.small {
   height: 32px;

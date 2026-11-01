@@ -64,6 +64,10 @@ function mapScene(): MapScene {
       }
       draw();
     },
+    onOverlay(id) {
+      ui.overlay = id;
+      draw();
+    },
     onOpen(id) {
       if (!game.isWater(id)) return;
       ui.tileId = id;

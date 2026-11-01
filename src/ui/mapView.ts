@@ -37,7 +37,6 @@ export function renderMap(game: Game, ui: UiState): string {
   return `${header(game, ui)}
   <main class="layout">
     <section class="left" aria-label="Pond map">
-      ${overlayChips(game, ui)}
       <div id="stage-slot"></div>
       ${legend(game, ui)}
       ${interventionsPanel(game, ui.selection, ui.selection.length > 1 ? `${ui.selection.length} selected tiles` : undefined)}
@@ -49,14 +48,15 @@ export function renderMap(game: Game, ui: UiState): string {
   ${modals(game, ui)}`;
 }
 
-function overlayChips(game: Game, ui: UiState): string {
-  const chip = (id: string, name: string, color: string) =>
-    `<button type="button" class="chip ${ui.overlay === id ? 'on' : ''}" data-action="overlay:${id}" aria-pressed="${ui.overlay === id}"><span class="dot" style="background:${color}"></span>${esc(name)}</button>`;
+/** Views offered in the map's "Show" drop-down. */
+function overlayOptions(game: Game) {
   const layers = new Set(game.mission.layers_enabled);
   const vars = OVERLAYS.map((id) => game.data.variables.get(id)!).filter((v) => layers.has(v.layer));
-  return `<div class="chips"><span class="label">Show</span>${chip('surface', 'Surface view', 'var(--text)')}${chip('flow', 'Water flow', '#4F8FD6')}${vars
-    .map((v) => chip(v.id, v.name, game.data.layers.get(v.layer)!.color))
-    .join('')}</div>`;
+  return [
+    { id: 'surface', label: 'Surface view', group: 'Views' },
+    { id: 'flow', label: 'Water flow', group: 'Views' },
+    ...vars.map((v) => ({ id: v.id, label: v.name, group: 'What you know' })),
+  ];
 }
 
 /** Colour scale for an overlay, spanning what the player knows across tiles. */
@@ -69,6 +69,29 @@ function overlayScale(game: Game, variableId: string) {
   return { lo, hi, t: (x: number) => 0.15 + 0.85 * ((x - lo) / (hi - lo)) };
 }
 
+
+/** Mean rise of the pond surface since the mission began, from the gauges (water depth is fully observable). */
+function waterRise(game: Game): number {
+  const map = game.sim.grid.map;
+  const pond = game.sim.grid.waterTiles();
+  let sum = 0;
+  for (const t of pond) {
+    const k = game.known(t.id, 'water_depth');
+    const start = map.tiles[t.index].initial.water_depth ?? 0;
+    if (k.state === 'measured') sum += k.value - start;
+  }
+  return pond.length ? sum / pond.length : 0;
+}
+
+/** The outlet weir: raised by the raise_weir intervention's depth change, built over its duration. */
+function weirState(game: Game): MapViewState['weir'] {
+  const iv = game.data.interventions.get('raise_weir');
+  if (!iv || !game.mission.interventions.includes(iv.id)) return { raisedBy: 0, building: false, progress: 0 };
+  const full = iv.effects.find((e) => e.variable === 'water_depth' && e.op === 'add')?.value ?? 0;
+  const progress = game.sim.interventionProgress(iv.id);
+  if (progress !== null) return { raisedBy: full * progress, building: true, progress };
+  return { raisedBy: game.timesDone(iv.id) > 0 ? full : 0, building: false, progress: 0 };
+}
 
 /** Everything the 3D scene may draw: observable state and knowledge only. */
 export function mapViewState(game: Game, ui: UiState): MapViewState {
@@ -130,6 +153,10 @@ export function mapViewState(game: Game, ui: UiState): MapViewState {
       ...map.outlets.map((b) => ({ tile: b.tile, face: b.face, name: b.name, kind: 'out' as const })),
     ],
     barrier: barrierState(game),
+    waterRise: waterRise(game),
+    weir: weirState(game),
+    overlay: ui.overlay,
+    overlayOptions: overlayOptions(game),
   };
 }
 
