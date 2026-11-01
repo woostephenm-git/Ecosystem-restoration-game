@@ -94,10 +94,10 @@
     "cost": 1000,
     "scope": "water_body",
     "effects": [
-      { "variable": "water_depth", "op": "add", "value": 0.3 }
+      { "variable": "weir_rise", "op": "add", "value": 0.3 }
     ],
     "duration_days": 30,
     "repeatable": false,
-    "design_note": "Red herring that backfires. Deeper water means less light at the bed, so plants find it harder to establish."
+    "design_note": "Red herring: costs money and does nothing about the carp. Deeper water cuts light at the bed in the old pond, while the rising water floods low meadow into new shallows that plants can colonise once carp are controlled, and rewetted soil releases a phosphorus pulse. In this mission the two roughly cancel out."
   }
 ]

@@ -175,6 +175,11 @@ const map = {
   terrain: 'terrain/clearwater_pond.json',
   water_level: DATUM + WATER_LEVEL,
   mixing_m2_per_day: 125,
+  // Raising the outlet weir lifts the pond surface; low meadow floods once under 10 cm of water.
+  // Flooded meadow starts bare and fish-free, and rewetted soil releases some phosphorus.
+  level_variable: 'weir_rise',
+  flood_depth: MIN_DEPTH,
+  flood_initial: { plant_cover: 0, carp: 0, legacy_p: 2.5 },
   bodies: bodies.map((_, k) => ({
     id: bodyIds[k],
     name: k === pondBody ? 'Clearwater Pond' : `Hollow pond ${String.fromCharCode(65 + bodyIds.slice(0, k).filter((b) => b !== 'clearwater_pond').length)}`,

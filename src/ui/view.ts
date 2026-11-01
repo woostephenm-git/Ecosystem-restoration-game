@@ -531,7 +531,8 @@ function boundaryPanel(game: Game): string {
     return `<button type="button" class="brow" data-action="inspect-boundary:${id}"><span>${esc(v.name)}</span><span class="mono">${esc(val)}</span>${gauge(v, game.known(inletTile, id))}</button>`;
   };
   const watershed = game.data.boundaryConditions.get(game.mission.boundary_conditions)!;
-  const ids = Object.keys(watershed.values).filter((id) => game.data.variables.get(id)!.zone !== 'air');
+  // The weir is shown at the outlet, not as an inflow.
+  const ids = Object.keys(watershed.values).filter((id) => game.data.variables.get(id)!.zone !== 'air' && id !== g.map.level_variable);
   const climate = Object.keys(watershed.values).filter((id) => game.data.variables.get(id)!.zone === 'air');
   const barrier = barrierState(game);
   return `<div class="box">

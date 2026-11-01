@@ -186,15 +186,46 @@ describe('Clearwater Pond', () => {
       expect(g.sim.aggregate('secchi')).toBeCloseTo(control.sim.aggregate('secchi'), 1);
     });
 
-    it('raising the weir backfires: deeper water, less light, a winning plan fails', () => {
+    it('raising the weir floods low meadow into the pond, bare and soon full of carp', () => {
       const g = new Game(data, MISSION, 1);
-      const light = g.sim.aggregate('light_bed');
+      const before = new Set(g.waterTileIds());
+      const depthBefore = g.sim.tile('G7').values.water_depth;
+      g.intervene('raise_weir', INLET);
+      g.advance(15);
+      expect(g.sim.tile('G7').values.water_depth).toBeCloseTo(depthBefore + 0.15, 1);
+      g.advance(45);
+      expect(g.sim.tile('G7').values.water_depth).toBeCloseTo(depthBefore + 0.3, 2);
+      const added = g.waterTileIds().filter((id) => !before.has(id));
+      expect(added.length).toBeGreaterThan(2);
+      for (const id of added) {
+        const v = g.sim.tile(id).values;
+        expect(g.sim.grid.tiles[g.sim.grid.indexOf(id)].description).toBe('Flooded meadow');
+        expect(v.water_depth).toBeGreaterThan(0.1);
+        expect(v.plant_cover).toBeLessThan(1);
+        // Every flooded tile touches the pond: water does not jump across dry land.
+        const t = g.sim.grid.tiles[g.sim.grid.indexOf(id)];
+        expect(g.sim.grid.neighbours4[t.index].length).toBeGreaterThan(0);
+      }
+      // Fish move in, and the new tiles can be sampled like any other pond tile.
+      expect(g.sim.tile(added[0]).values.carp).toBeGreaterThan(50);
+      expect(g.sample('water_grab', added[0])).toBe(true);
+      expect(g.known(added[0], 'total_p').state).toBe('measured');
+      expect(g.log.some((l) => l.text.startsWith('Rising water flooded the meadow'))).toBe(true);
+      // The hollow pond stays scenery.
+      expect(g.sim.grid.tiles.filter((t) => t.body && t.body !== 'clearwater_pond').every((t) => !t.water)).toBe(true);
+    });
+
+    it('raising the weir costs light in the old pond and does not change the outcome', () => {
+      const g = new Game(data, MISSION, 1);
+      const light = g.sim.tile('G7').values.light_bed;
       g.intervene('raise_weir', INLET);
       g.advance(40);
-      expect(g.sim.aggregate('light_bed')).toBeLessThan(light);
+      expect(g.sim.tile('G7').values.light_bed).toBeLessThan(light);
+      // With the meadow flooding into new shallows, the net effect on a winning plan is small.
       const plan = { 0: ['carp_removal', 'carp_barrier'], 40: ['D7', 'G9', 'J7'].map((t) => `plant_submerged:${t}`) };
-      expect(play(1, plan).outcome!.success).toBe(true);
-      expect(play(1, { ...plan, 0: [...plan[0], 'raise_weir'] }).outcome!.success).toBe(false);
+      const without = play(1, plan).outcome!.value;
+      const withWeir = play(1, { ...plan, 0: [...plan[0], 'raise_weir'] }).outcome!.value;
+      expect(Math.abs(withWeir - without)).toBeLessThan(4);
     });
   });
 

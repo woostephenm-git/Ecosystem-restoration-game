@@ -13,6 +13,7 @@
       "period_days": 365,
       "peak_day": 300,
       "noise": 1.0
-    }
+    },
+    "weir_rise": { "type": "constant", "value": 0 }
   }
 }

@@ -58,20 +58,26 @@ export class Grid {
     depth: number[],
     /** Bed (ground) elevation of each tile, in map tile order. */
     elevation: number[],
+    /** Land tiles the pond has flooded into; they join the simulated pond. */
+    flooded: ReadonlySet<number> = new Set(),
   ) {
     this.rows = map.rows;
     this.cols = map.cols;
     this.area = map.tile_size_m * map.tile_size_m;
     const simulated = new Set(map.bodies.filter((b) => b.simulated).map((b) => b.id));
-    this.tiles = map.tiles.map((t, i) => ({
-      index: i,
-      id: t.id,
-      row: t.row,
-      col: t.col,
-      description: t.description,
-      body: t.body ?? null,
-      water: !!t.body && simulated.has(t.body) && depth[i] > 0,
-    }));
+    const pondBody = map.bodies.find((b) => b.simulated)?.id ?? null;
+    this.tiles = map.tiles.map((t, i) => {
+      const wet = flooded.has(i);
+      return {
+        index: i,
+        id: t.id,
+        row: t.row,
+        col: t.col,
+        description: wet ? 'Flooded meadow' : t.description,
+        body: wet ? pondBody : (t.body ?? null),
+        water: (wet || (!!t.body && simulated.has(t.body))) && depth[i] > 0,
+      };
+    });
     this.tiles.forEach((t) => this.index.set(t.id, t.index));
     const cell = new Map(this.tiles.map((t) => [`${t.row},${t.col}`, t]));
     const at = (r: number, c: number) => cell.get(`${r},${c}`);

@@ -273,6 +273,23 @@
     "description": "Carp swimming into the pond through the inflow channel."
   },
   {
+    "id": "weir_rise",
+    "name": "Outlet weir raised by",
+    "layer": "hydrology",
+    "zone": "water",
+    "unit": "m",
+    "kind": "boundary",
+    "update_interval_days": 1,
+    "observable": "full",
+    "observe_source": "Weir crest survey",
+    "initial_knowledge": "measured",
+    "display_decimals": 2,
+    "scale": { "min": 0, "max": 0.5 },
+    "min": 0,
+    "pin": { "x": 0.96, "y": 0.1 },
+    "description": "How far the outlet weir crest has been raised. The pond surface rises with it, and low meadow along the shore floods."
+  },
+  {
     "id": "wind",
     "name": "Surface wind",
     "layer": "microclimate",

@@ -7,6 +7,13 @@
  "terrain": "terrain/clearwater_pond.json",
  "water_level": 10,
  "mixing_m2_per_day": 125,
+ "level_variable": "weir_rise",
+ "flood_depth": 0.1,
+ "flood_initial": {
+  "plant_cover": 0,
+  "carp": 0,
+  "legacy_p": 2.5
+ },
  "bodies": [
   {
    "id": "clearwater_pond",

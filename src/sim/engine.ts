@@ -56,13 +56,14 @@ export interface EdgeFluxes {
 export interface SimSnapshot {
   t: number;
   values: Record<string, number>[];
+  flooded: number[];
 }
 
 export class Simulation {
   /** Absolute simulated day, counted from the start of spin-up. */
   t = 0;
   readonly tiles: TileState[];
-  readonly grid: Grid;
+  grid: Grid;
   readonly boundary: Record<string, number> = {};
   /** Lateral inputs per tile, as computed by the last map pass. */
   readonly lateral: Record<string, LateralCombo>[];
@@ -76,7 +77,11 @@ export class Simulation {
   private readonly lateralVars: Variable[];
   private readonly linksTo = new Map<string, NormalLink[]>();
   /** Cached for the inner loop: simulated water tile indices, and each stock with its incoming links. */
-  private readonly waterIdx: number[];
+  private waterIdx: number[];
+  /** Land tiles the pond has flooded into, in the order they flooded. */
+  readonly flooded = new Set<number>();
+  /** Each tile's depth before any rise in the pond surface. */
+  private readonly baseDepth: number[];
   private readonly stockLinks: { v: Variable; links: NormalLink[] }[];
   private readonly bc: BoundaryConditions;
 
@@ -109,9 +114,8 @@ export class Simulation {
     });
     this.lateral = this.tiles.map(() => ({}));
 
-    const depth = this.tiles.map((t) => t.values.water_depth ?? 0);
-    const elevation = this.tiles.map((t) => t.values.bed_elevation ?? 0);
-    this.grid = new Grid(map, depth, elevation);
+    this.baseDepth = this.tiles.map((t) => t.values.water_depth ?? 0);
+    this.grid = this.buildGrid();
     this.waterIdx = this.grid.waterTiles().map((t) => t.index);
     this.stockLinks = this.stocks.map((v) => ({ v, links: this.linksTo.get(v.id) ?? [] }));
 
@@ -121,13 +125,16 @@ export class Simulation {
   }
 
   snapshot(): SimSnapshot {
-    return { t: this.t, values: this.tiles.map((t) => ({ ...t.values })) };
+    return { t: this.t, values: this.tiles.map((t) => ({ ...t.values })), flooded: [...this.flooded] };
   }
 
   /** Continue from a snapshot. Boundary noise comes from this simulation's own seed from here on. */
   restore(s: SimSnapshot) {
     this.t = s.t;
     s.values.forEach((v, i) => Object.assign(this.tiles[i].values, v));
+    this.flooded.clear();
+    s.flooded.forEach((i) => this.flooded.add(i));
+    this.regrid();
     this.updateBoundary();
     this.mapPass();
     this.updateAllDerived();
@@ -300,10 +307,64 @@ export class Simulation {
     return Math.min(48, Math.max(1, Math.ceil(fastest / 0.8)));
   }
 
+  private buildGrid(): Grid {
+    const depth = this.tiles.map((t) => t.values.water_depth ?? 0);
+    const elevation = this.tiles.map((t) => t.values.bed_elevation ?? 0);
+    return new Grid(this.data.maps.get(this.mission.map)!, depth, elevation, this.flooded);
+  }
+
+  /** Rebuild geometry and flows after the pond changes shape. */
+  private regrid() {
+    this.grid = this.buildGrid();
+    this.waterIdx = this.grid.waterTiles().map((t) => t.index);
+  }
+
+  /**
+   * Pond level (once a day, before the map pass). Depths follow the pond surface; land that
+   * borders the pond and sits under more than `flood_depth` of water floods and joins it.
+   */
+  private hydrology() {
+    const map = this.grid.map;
+    if (!map.level_variable) return;
+    const rise = this.boundary[map.level_variable] ?? 0;
+    const surface = map.water_level + rise;
+    for (const i of this.waterIdx) {
+      const v = this.tiles[i].values;
+      v.water_depth = this.flooded.has(i) ? surface - v.bed_elevation : this.baseDepth[i] + rise;
+    }
+    const g = this.grid;
+    const isWater = (i: number) => g.tiles[i].water || this.flooded.has(i);
+    let grew = false;
+    for (let changed = true; changed; ) {
+      changed = false;
+      for (const t of g.tiles) {
+        if (t.body || this.flooded.has(t.index)) continue;
+        const v = this.tiles[t.index].values;
+        const depth = surface - v.bed_elevation;
+        if (depth <= map.flood_depth) continue;
+        const wetNeighbours = [g.at(t.row - 1, t.col), g.at(t.row + 1, t.col), g.at(t.row, t.col - 1), g.at(t.row, t.col + 1)]
+          .filter((n) => n && isWater(n.index))
+          .map((n) => this.tiles[n!.index].values);
+        if (!wetNeighbours.length) continue;
+        // Drowned meadow: water mixed in from its neighbours, no plants or fish yet.
+        for (const s of this.stocks) {
+          if (s.id === 'bed_elevation') continue;
+          if (s.id === 'water_depth') v.water_depth = depth;
+          else if (s.id in map.flood_initial) v[s.id] = map.flood_initial[s.id];
+          else v[s.id] = wetNeighbours.reduce((sum, n) => sum + (n[s.id] ?? 0), 0) / wetNeighbours.length;
+        }
+        this.flooded.add(t.index);
+        changed = grew = true;
+      }
+    }
+    if (grew) this.regrid();
+  }
+
   private tick() {
     // Boundary conditions (and their random noise) advance once per day, so a seed gives
     // the same run whatever the substep count.
     this.updateBoundary();
+    this.hydrology();
     this.mapPass();
     const n = this.substeps();
     for (let s = 0; s < n; s++) {

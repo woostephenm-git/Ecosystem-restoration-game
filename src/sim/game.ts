@@ -213,7 +213,12 @@ export class Game {
   advance(days: number) {
     for (let i = 0; i < days; i++) {
       const active = this.sim.activeKeys();
+      const wetBefore = this.sim.flooded.size;
       this.sim.step(1);
+      if (this.sim.flooded.size > wetBefore) {
+        const ids = [...this.sim.flooded].slice(wetBefore).map((i) => this.sim.grid.tiles[i].id);
+        this.log.push({ day: this.day, kind: 'event', text: `Rising water flooded the meadow at ${ids.join(', ')}` });
+      }
       const still = new Set(this.sim.activeKeys());
       for (const key of active) {
         if (still.has(key)) continue;

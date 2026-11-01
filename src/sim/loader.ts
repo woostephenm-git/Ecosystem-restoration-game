@@ -187,6 +187,11 @@ export function loadData(files: RawFiles): DataBundle {
       cells.add(cell);
     }
     for (const e of [...map.inlets, ...map.outlets]) if (!ids.has(e.tile)) problems.push(`${path}: inlet or outlet names unknown tile "${e.tile}"`);
+    if (map.level_variable) {
+      needVar(map.level_variable, `${path} level_variable`);
+      if (variables.get(map.level_variable) && variables.get(map.level_variable)!.kind !== 'boundary') problems.push(`${path}: level_variable must be a boundary variable`);
+    }
+    for (const ref of Object.keys(map.flood_initial)) needVar(ref, `${path} flood_initial`);
     const bodyIds = new Set(map.bodies.map((b) => b.id));
     for (const tile of map.tiles) if (tile.body && !bodyIds.has(tile.body)) problems.push(`${path} tile ${tile.id}: unknown body "${tile.body}"`);
     if (map.terrain && !files[map.terrain]) problems.push(`${path}: terrain "${map.terrain}" not found`);

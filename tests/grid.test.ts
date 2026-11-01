@@ -24,6 +24,8 @@ function map(rows: number, cols: number, inlet: string, outlet: string, land: st
     tile_size_m: 10,
     water_level: 10,
     mixing_m2_per_day: 0,
+    flood_depth: 0.1,
+    flood_initial: {},
     bodies: [{ id: 'p', name: 'P', simulated: true }],
     defaults: {},
     tiles,
@@ -67,6 +69,17 @@ describe('grid and steady flow', () => {
     expect(g.neighbours4[g.indexOf('B2')].length).toBe(4);
     expect(g.neighbours4[g.indexOf('A2')].map((i) => g.tiles[i].id).sort()).toEqual(['A1', 'B2']);
     expect(g.tiles[g.indexOf('A3')].water).toBe(false);
+  });
+
+  it('flooded land joins the pond and carries flow', () => {
+    const m = map(1, 3, 'A1', 'C1', ['B1']);
+    const dry = new Grid(m, [1, 0, 1], [9, 9, 9]);
+    expect(dry.tiles[1].water).toBe(false);
+    expect(dry.throughShare[2]).toBe(0);
+    const wet = new Grid(m, [1, 0.2, 1], [9, 9.8, 9], new Set([1]));
+    expect(wet.tiles[1].water).toBe(true);
+    expect(wet.tiles[1].description).toBe('Flooded meadow');
+    expect(wet.throughShare[1]).toBeCloseTo(1);
   });
 
   it('drains land runoff to the steepest downhill neighbour', () => {

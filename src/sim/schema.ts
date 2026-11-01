@@ -171,6 +171,14 @@ export const MapSchema = z.object({
   water_level: z.number(),
   /** Mixing between neighbouring water tiles. Per-tile exchange = this / tile area. */
   mixing_m2_per_day: z.number().min(0),
+  /**
+   * Boundary variable that raises the pond surface (e.g. a weir). When set, pond depths follow
+   * the surface, and land bordering the pond floods once water over it is deeper than `flood_depth`.
+   */
+  level_variable: id.optional(),
+  flood_depth: z.number().positive().default(0.1),
+  /** Stock values for newly flooded tiles. Stocks not listed take the mean of neighbouring pond water. */
+  flood_initial: z.record(z.string(), z.number()).default({}),
   /** Water bodies. Only simulated bodies' tiles run the sim; the rest are scenery. */
   bodies: z.array(z.object({ id, name: z.string(), simulated: z.boolean() })).min(1),
   /** Initial stock values shared by every tile; a tile's own `initial` overrides them. */

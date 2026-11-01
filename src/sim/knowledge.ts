@@ -61,6 +61,9 @@ export class Knowledge {
   /** Free visual observation and gauges. Runs after every simulated day. */
   observe() {
     const today = this.sim.missionDay;
+    for (const t of this.sim.grid.waterTiles()) {
+      if (!this.tiles.has(t.id)) this.tiles.set(t.id, new Map([...this.sim.data.variables.keys()].map((id) => [id, {}])));
+    }
     for (const tile of this.sim.grid.waterTiles().map((t) => this.sim.tiles[t.index])) {
       for (const v of this.sim.data.variables.values()) {
         if (v.observable === 'full') {

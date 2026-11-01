@@ -70,10 +70,14 @@ function overlayScale(game: Game, variableId: string) {
 }
 
 
-/** Mean rise of the pond surface since the mission began, from the gauges (water depth is fully observable). */
+/**
+ * Mean rise of the pond surface since the mission began, from the depth gauges on the
+ * original pond tiles (water depth is fully observable). Flooded meadow is left out:
+ * its depth starts from dry ground, not from the old surface.
+ */
 function waterRise(game: Game): number {
   const map = game.sim.grid.map;
-  const pond = game.sim.grid.waterTiles();
+  const pond = game.sim.grid.waterTiles().filter((t) => (map.tiles[t.index].initial.water_depth ?? 0) > 0);
   let sum = 0;
   for (const t of pond) {
     const k = game.known(t.id, 'water_depth');
@@ -87,7 +91,8 @@ function waterRise(game: Game): number {
 function weirState(game: Game): MapViewState['weir'] {
   const iv = game.data.interventions.get('raise_weir');
   if (!iv || !game.mission.interventions.includes(iv.id)) return { raisedBy: 0, building: false, progress: 0 };
-  const full = iv.effects.find((e) => e.variable === 'water_depth' && e.op === 'add')?.value ?? 0;
+  const level = game.sim.grid.map.level_variable;
+  const full = iv.effects.find((e) => e.variable === level && e.op === 'add')?.value ?? 0;
   const progress = game.sim.interventionProgress(iv.id);
   if (progress !== null) return { raisedBy: full * progress, building: true, progress };
   return { raisedBy: game.timesDone(iv.id) > 0 ? full : 0, building: false, progress: 0 };
