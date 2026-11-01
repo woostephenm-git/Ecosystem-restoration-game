@@ -314,10 +314,19 @@ export class Game {
     return { ok: true };
   }
 
-  /** What a funding application can show: the target, and every variable the player has sampled. */
+  /**
+   * What a funding application can show: the target, and every variable the player has sampled,
+   * except derived ones. Those (Secchi depth, light at the bed, bottom oxygen) are calculated
+   * straight from other variables, so arrows through them only restate a definition, such as
+   * "Secchi depth sets light at the bed". Arrows pass through them instead: suspended sediment
+   * limits plants by way of clarity and light.
+   */
   fundingNodes(): string[] {
     const target = this.mission.funding!.target;
-    return [target, ...this.visibleVariables().map((v) => v.id).filter((id) => id !== target && this.measuredEver(id))];
+    const ids = this.visibleVariables()
+      .filter((v) => v.kind !== 'derived' && v.id !== target && this.measuredEver(v.id))
+      .map((v) => v.id);
+    return [target, ...ids];
   }
 
   /**

@@ -26,7 +26,7 @@ describe('funding applications', () => {
     for (const chain of [
       ['carp', 'suspended_sediment'],
       ['total_p', 'chla'],
-      ['water_depth', 'light_bed'],
+      ['nitrate', 'chla'],
     ]) {
       const g = sampled();
       const b0 = g.budget;
@@ -60,20 +60,39 @@ describe('funding applications', () => {
   it('records a verdict per arrow, shown on later boards once decided', () => {
     const g = sampled();
     const app = g.applyForFunding([
-      ['secchi', 'plant_cover'],
-      ['nitrate', 'secchi'],
+      ['suspended_sediment', 'plant_cover'],
+      ['nitrate', 'suspended_sediment'],
     ])!;
     expect(app.supported).toEqual([true, false]);
     expect(g.pastArrows()).toEqual([]);
     g.advance(180);
     expect(g.pastArrows()).toEqual([
-      { from: 'secchi', to: 'plant_cover', supported: true },
-      { from: 'nitrate', to: 'secchi', supported: false },
+      { from: 'suspended_sediment', to: 'plant_cover', supported: true },
+      { from: 'nitrate', to: 'suspended_sediment', supported: false },
     ]);
   });
 
+  it('leaves derived variables off the board, so only real two-step chains remain', () => {
+    const g = sampled();
+    g.sample('sediment_core', 'G7');
+    const [target, ...nodes] = g.fundingNodes();
+    for (const id of ['secchi', 'light_bed', 'bottom_do']) expect(nodes).not.toContain(id);
+    const chains: string[] = [];
+    for (const x of nodes) for (const y of nodes) if (x !== y && g.supportsArrow(x, target) && g.supportsArrow(y, x)) chains.push(`${y} > ${x}`);
+    expect(chains.sort()).toEqual(['carp > suspended_sediment', 'nitrate > chla', 'total_p > chla']);
+  });
+
+  it('ignores arrows to or from variables that are not on the board', () => {
+    const app = sampled().applyForFunding([
+      ['light_bed', 'plant_cover'],
+      ['secchi', 'light_bed'],
+    ])!;
+    expect(app.arrows).toEqual([]);
+    expect(app.success).toBe(false);
+  });
+
   it('needs a chain two steps deep', () => {
-    const app = sampled().applyForFunding([['light_bed', 'plant_cover']])!;
+    const app = sampled().applyForFunding([['suspended_sediment', 'plant_cover']])!;
     expect(app.success).toBe(false);
     expect(app.problems[0]).toMatch(/two steps deep/);
   });

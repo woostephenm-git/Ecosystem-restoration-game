@@ -213,6 +213,9 @@ button:focus-visible {
   height: 44px;
   font-weight: 500;
 }
+.btn.primary:disabled {
+  opacity: 0.45;
+}
 .time-controls {
   display: flex;
   gap: 6px;
