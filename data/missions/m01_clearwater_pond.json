@@ -13,13 +13,22 @@
   "spinup_days": 1460,
   "objective": {
     "variable": "plant_cover",
-    "target": 50,
+    "target": 30,
     "aggregate": "mean_over_water",
     "deadline_years": 3,
-    "text": "Reach 50% submerged plant cover across Clearwater Pond by the end of year 3."
+    "text": "Reach 30% submerged plant cover across Clearwater Pond by the end of year 3."
   },
   "methods": ["secchi_disk", "water_grab", "oxygen_profile", "fish_survey", "inflow_fish_trap", "sediment_core"],
-  "interventions": ["plant_submerged", "carp_removal", "carp_barrier", "alum_treatment"],
+  "interventions": [
+    "plant_submerged",
+    "carp_removal",
+    "carp_barrier",
+    "alum_treatment",
+    "barley_straw",
+    "algaecide",
+    "nitrate_agreement",
+    "raise_weir"
+  ],
   "measurement_fresh_days": 30,
   "limiting_factors": {
     "title": "What limits plant establishment here",

@@ -145,7 +145,7 @@ export function mapViewState(game: Game, ui: UiState): MapViewState {
 
 function legend(game: Game, ui: UiState): string {
   if (ui.overlay === 'surface') {
-    return `<div class="legend"><span>Surface view: water colour from visible clarity, green fronds for visible plants. Ripples and mud plumes hint at fish; fish themselves appear once surveyed.</span></div>`;
+    return `<div class="legend"><span>Surface view: water colour from visible clarity, green fronds for visible plants. Bow wakes and trails of mud hint at carp feeding below the surface; the fish themselves appear once surveyed.</span></div>`;
   }
   if (ui.overlay === 'flow') {
     return `<div class="legend"><span><span class="swatch" style="background:#1f5f8e"></span> water flowing through the pond (longer arrows carry more)</span><span><span class="swatch" style="background:#8a5a2b"></span> where rain runs off the land; × marks a hollow</span></div>`;

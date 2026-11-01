@@ -169,7 +169,7 @@
     "pin": { "x": 0.4, "y": 0.8 },
     "description": "Bottom-feeding fish that root through sediment for food, uprooting plants and stirring up mud.",
     "coarse_bins": [0, 40, 150, 1000],
-    "observe_source": "Ripples and mud plumes seen from the bank"
+    "observe_source": "Wakes and mud plumes seen from the bank"
   },
   {
     "id": "plant_cover",

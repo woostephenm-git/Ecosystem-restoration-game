@@ -135,6 +135,8 @@ export const InterventionSchema = z.object({
   effects: z.array(z.object({ variable: id, op: z.enum(['add', 'multiply', 'set']), value: z.number() })).min(1),
   duration_days: z.number().int().positive(),
   repeatable: z.boolean(),
+  /** For designers and instructors only; never shown to players (e.g. why this is a red herring). */
+  design_note: z.string().optional(),
 });
 
 const BoundaryValueSchema = z.discriminatedUnion('type', [

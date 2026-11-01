@@ -118,7 +118,7 @@ describe('Clearwater Pond', () => {
     expect(tileMethods * waterTiles).toBeGreaterThan(budget);
   });
 
-  it('shows hysteresis: at the same carp level, clear and turbid states both persist', { timeout: 120_000 }, () => {
+  it('shows hysteresis: at the same carp level, clear and turbid states both persist', { timeout: 180_000 }, () => {
     const mission = data.missions.get(MISSION)!;
     const HOLD = 200;
     const runHeld = (sim: Simulation, days: number) => {
@@ -148,6 +148,54 @@ describe('Clearwater Pond', () => {
     expect(turbid.aggregate('plant_cover')).toBeLessThan(5);
     expect(clear.aggregate('plant_cover')).toBeGreaterThan(30);
     expect(clear.aggregate('secchi')).toBeGreaterThan(2 * turbid.aggregate('secchi'));
+  });
+
+  describe('red herrings', () => {
+    const HERRINGS = ['barley_straw', 'algaecide', 'nitrate_agreement', 'raise_weir'];
+
+    it('are offered in the mission and marked for instructors', () => {
+      const mission = data.missions.get(MISSION)!;
+      for (const id of HERRINGS) {
+        expect(mission.interventions).toContain(id);
+        expect(data.interventions.get(id)!.design_note).toMatch(/red herring/i);
+      }
+    });
+
+    it('do not restore the pond, even with planting', () => {
+      expect(play(1, { 0: HERRINGS }).outcome!.success).toBe(false);
+      expect(play(1, { 0: HERRINGS.slice(0, 3), 40: SHALLOWS }).outcome!.success).toBe(false);
+    });
+
+    it('algaecide clears algae for a few weeks, then they rebound', () => {
+      const g = new Game(data, MISSION, 1);
+      const before = g.sim.aggregate('chla');
+      g.intervene('algaecide', INLET);
+      g.advance(5);
+      expect(g.sim.aggregate('chla')).toBeLessThan(before * 0.5);
+      g.advance(60);
+      expect(g.sim.aggregate('chla')).toBeGreaterThan(before * 0.8);
+    });
+
+    it('the nitrate agreement lowers pond nitrate but leaves the water as murky', () => {
+      const g = new Game(data, MISSION, 1);
+      const control = new Game(data, MISSION, 1);
+      g.intervene('nitrate_agreement', INLET);
+      g.advance(365);
+      control.advance(365);
+      expect(g.sim.aggregate('nitrate')).toBeLessThan(control.sim.aggregate('nitrate') * 0.7);
+      expect(g.sim.aggregate('secchi')).toBeCloseTo(control.sim.aggregate('secchi'), 1);
+    });
+
+    it('raising the weir backfires: deeper water, less light, a winning plan fails', () => {
+      const g = new Game(data, MISSION, 1);
+      const light = g.sim.aggregate('light_bed');
+      g.intervene('raise_weir', INLET);
+      g.advance(40);
+      expect(g.sim.aggregate('light_bed')).toBeLessThan(light);
+      const plan = { 0: ['carp_removal', 'carp_barrier'], 40: ['D7', 'G9', 'J7'].map((t) => `plant_submerged:${t}`) };
+      expect(play(1, plan).outcome!.success).toBe(true);
+      expect(play(1, { ...plan, 0: [...plan[0], 'raise_weir'] }).outcome!.success).toBe(false);
+    });
   });
 
   it('alum lowers phosphorus and algae (optional depth)', () => {

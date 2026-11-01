@@ -47,5 +47,57 @@
     ],
     "duration_days": 7,
     "repeatable": true
+  },
+  {
+    "id": "barley_straw",
+    "name": "Barley straw bales",
+    "description": "Float bales of barley straw in the pond. Widely recommended for clearing green water.",
+    "cost": 400,
+    "scope": "water_body",
+    "effects": [
+      { "variable": "chla", "op": "multiply", "value": 0.85 }
+    ],
+    "duration_days": 60,
+    "repeatable": true,
+    "design_note": "Red herring. Evidence for barley straw is weak, and algae are not what keeps this pond dark: suspended sediment from carp is."
+  },
+  {
+    "id": "algaecide",
+    "name": "Algaecide treatment",
+    "description": "Dose the pond with an algaecide. The water greens less within days.",
+    "cost": 900,
+    "scope": "water_body",
+    "effects": [
+      { "variable": "chla", "op": "multiply", "value": 0.2 }
+    ],
+    "duration_days": 3,
+    "repeatable": true,
+    "design_note": "Red herring. Algae rebound within weeks because phosphorus is still high, and the sediment carp stir up still blocks the light."
+  },
+  {
+    "id": "nitrate_agreement",
+    "name": "Upstream nitrate agreement",
+    "description": "Pay farms upstream to cut fertiliser runoff. Halves nitrate in the inflow from now on.",
+    "cost": 2000,
+    "scope": "water_body",
+    "effects": [
+      { "variable": "inflow_no3", "op": "multiply", "value": 0.5 }
+    ],
+    "duration_days": 60,
+    "repeatable": false,
+    "design_note": "Red herring. Nitrate is not limiting anything here (phosphorus limits the algae, light and carp limit the plants). Good for the river, no help to this pond."
+  },
+  {
+    "id": "raise_weir",
+    "name": "Raise the outlet weir",
+    "description": "Raise the outlet weir by 30 cm to give the pond more water.",
+    "cost": 1000,
+    "scope": "water_body",
+    "effects": [
+      { "variable": "water_depth", "op": "add", "value": 0.3 }
+    ],
+    "duration_days": 30,
+    "repeatable": false,
+    "design_note": "Red herring that backfires. Deeper water means less light at the bed, so plants find it harder to establish."
   }
 ]

@@ -2,7 +2,7 @@
   {
     "id": "secchi_disk",
     "name": "Secchi disk",
-    "cost": 40,
+    "cost": 15,
     "reveals": ["secchi"],
     "scope": "tile",
     "mark": { "kind": "secchi", "label": "Secchi" }
@@ -10,7 +10,7 @@
   {
     "id": "water_grab",
     "name": "Water grab sample",
-    "cost": 250,
+    "cost": 80,
     "reveals": ["suspended_sediment", "chla", "total_p", "nitrate"],
     "scope": "tile",
     "mark": { "kind": "bottle", "label": "Grab sample" }
@@ -18,7 +18,7 @@
   {
     "id": "oxygen_profile",
     "name": "Oxygen profile",
-    "cost": 400,
+    "cost": 120,
     "reveals": ["bottom_do"],
     "scope": "tile",
     "mark": { "kind": "probe", "label": "O₂ probe" }
@@ -42,7 +42,7 @@
   {
     "id": "sediment_core",
     "name": "Sediment core",
-    "cost": 900,
+    "cost": 300,
     "reveals": ["legacy_p"],
     "scope": "tile",
     "mark": { "kind": "core", "label": "Core" }

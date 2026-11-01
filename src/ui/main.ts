@@ -217,4 +217,5 @@ function frame() {
 draw();
 setInterval(frame, 50);
 // Exposed for debugging in the console only.
-(window as unknown as { game: Game }).game = game;
+(window as unknown as { game: Game; mapScene: () => MapScene | null }).game = game;
+(window as unknown as { mapScene: () => MapScene | null }).mapScene = () => scene;

@@ -14,7 +14,7 @@ npm run gen-map    # re-bake the map and terrain from the terrain generator
 npm run profile    # time one simulated year
 ```
 
-Scenarios for `npm run sim`: `nothing`, `plant`, `removal`, `solution`, `solution_noplant`, `solution1`, `solution3`, `solution_deep`, `full`. Add a seed after the scenario name, e.g. `npm run sim -- solution 2`.
+Scenarios for `npm run sim`: `nothing`, `plant`, `removal`, `solution`, `solution_noplant`, `solution1`, `solution3`, `solution_deep`, `full`. Add a seed after the scenario name, e.g. `npm run sim -- solution 2`. Red-herring scenarios: `herrings`, `herrings_planted`, `solution3_weir`.
 
 ## Layout
 
@@ -65,14 +65,16 @@ These were marked Open or Proposed in the design doc, or decided in review. Each
 
 - **Engine:** TypeScript + Vite in the browser, chosen over Godot 4. The sim core has no browser dependencies and could be ported.
 - **Failure state:** the objective is scored at the deadline from the true state, then the player can keep running the pond as a sandbox.
-- **Objective:** mean submerged plant cover over all of the pond's tiles, target 50% by the end of year 3.
+- **Objective:** mean submerged plant cover over all of the pond's tiles, target 30% by the end of year 3.
 - **Budget:** one shared $8,000 for sampling and interventions. The dev server overrides it with $100,000 for testing (`TESTING_BUDGET` in `src/ui/main.ts`).
 - **Grid scale:** 25 m tiles on a 12 × 12 grid.
 - **Water flow:** steady potential flow through the pond (ported from the bench), at tile resolution. Flow spreads across the basin and favours deep water rather than following one path. Face flows conserve water exactly. The map's surface animation uses the same solver on a finer grid.
 - **Rates that scale with tile size:** mixing, carp movement and plant spread are diffusivities in m²/day, divided by tile area. Changing the tile size keeps them physical.
 - **Integration:** daily stocks take as many substeps as the fastest exchange needs, so rate × step stays under 0.8. Spin-up runs once per mission with a fixed seed and is cached; the player's seed drives everything after it.
 - **Lateral processes:** the map pass writes `lateral` variables (water exchange, incoming concentrations, carp arriving and leaving, plant fragments arriving), which ordinary links read. Each one is a weighted sum of other tiles' values and boundary values, so the knowledge model can work out what is known about it.
-- **Carp ripples:** carp are a coarse observable. Ripples give none / some / many (0–40, 40–150, 150–1000 kg/ha) for free, which makes carp a LIKELY limiting factor from the start; a survey gives the number.
+- **Carp wakes:** carp are a coarse observable. Bow wakes and trails of stirred-up mud give none / some / many (0–40, 40–150, 150–1000 kg/ha) for free, which makes carp a LIKELY limiting factor from the start; a survey gives the number.
+- **Sampling costs:** per-tile methods are cheap because a 35-tile pond needs sampling in many places (Secchi $15, water grab $80, oxygen profile $120, sediment core $300). Whole-pond methods keep their price (fish survey $1,200, inflow fish trap $300).
+- **Red herrings:** four plausible interventions that do not fix this pond: barley straw, algaecide, an upstream nitrate agreement, and raising the outlet weir (which backfires by cutting light at the bed). Each carries a `design_note` for instructors that players never see.
 - **Scopes:** planting is per tile ($300 each, and the whole selection at once on the map). Carp removal, the barrier and alum act on the whole pond. Fish surveys and the inflow fish trap cover the whole water body. Other sampling covers one tile.
 - **Seed bank:** nearly depleted, so restoring clarity without planting fails.
 - **Scales:** every variable has a typical range (`scale` in `data/variables.json`), with an optional reference mark. Gauges show low, mid or high by thirds of that range.
@@ -83,7 +85,7 @@ These were marked Open or Proposed in the design doc, or decided in review. Each
 
 - Light: `Kd = 1.7 / Secchi` (Poole-Atkins); light at the bed = `exp(-Kd × depth)`.
 - Turbid state: carp around 465 kg/ha (most at the inlet), suspended sediment around 50 mg/L, Secchi around 0.45 m. The shallow margins still get light, but carp uproot whatever grows.
-- Restored state: Secchi around 2.5–3 m, plant cover 55–85% depending on how many tiles were planted.
+- Restored state: Secchi around 2.5–3 m. Plant cover by the deadline depends on how many tiles were planted: one tile reaches about 6%, three about 41%, six about 58%.
 - Feedback loops that create the two stable states: plants trap sediment and suppress carp spawning; bare sediment plus carp keeps the water dark; low oxygen releases legacy phosphorus, which feeds algae, which use up more oxygen.
 
 ## Known rough edges

@@ -22,6 +22,9 @@ const plans: Record<string, Plan> = {
   solution1: { 0: ['carp_removal', 'carp_barrier'], 40: plant('G9') },
   solution_deep: { 0: ['carp_removal', 'carp_barrier'], 40: DEEP },
   full: { 0: ['carp_removal', 'carp_barrier', 'alum_treatment'], 40: SHALLOWS },
+  herrings: { 0: ['barley_straw', 'algaecide', 'nitrate_agreement', 'raise_weir'] },
+  herrings_planted: { 0: ['barley_straw', 'algaecide', 'nitrate_agreement'], 40: SHALLOWS },
+  solution3_weir: { 0: ['carp_removal', 'carp_barrier', 'raise_weir'], 40: plant('D7', 'G9', 'J7') },
 };
 const plan = plans[scenario];
 if (!plan) throw new Error(`Unknown scenario ${scenario}. Try: ${Object.keys(plans).join(', ')}`);
