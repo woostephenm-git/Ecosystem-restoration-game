@@ -53,6 +53,8 @@ export interface FundingApplication {
   day: number;
   due: number;
   arrows: [string, string][];
+  /** Whether the reviewers found each arrow supported, in the same order as `arrows`. */
+  supported: boolean[];
   /** The two-step chain the application was judged on, [cause, factor], if one qualified. */
   chain: [string, string] | null;
   success: boolean;
@@ -365,10 +367,14 @@ export class Game {
     const name = (id: string) => (id === f.target ? f.target_name : this.data.variables.get(id)!.name).toLowerCase();
     const problems: string[] = [];
     const ok = new Set<string>();
-    for (const [a, b] of list) {
-      if (a !== f.target && this.supportsArrow(a, b)) ok.add(`${a}>${b}`);
-      else problems.push(`The reviewers found no evidence that ${name(a)} drives ${name(b)} in this pond.`);
-    }
+    const supported = list.map(([a, b]) => {
+      if (a !== f.target && this.supportsArrow(a, b)) {
+        ok.add(`${a}>${b}`);
+        return true;
+      }
+      problems.push(`The reviewers found no evidence that ${name(a)} drives ${name(b)} in this pond.`);
+      return false;
+    });
     const funded = new Set(this.applications.filter((x) => x.success && x.chain).map((x) => x.chain!.join('>')));
     const chains = list
       .filter(([, b]) => b === f.target)
@@ -378,10 +384,18 @@ export class Game {
     if (!chains.length && !problems.length)
       problems.push(`The application needs a chain two steps deep: something that limits ${name(f.target)}, and what drives it.`);
     else if (chains.length && !fresh) problems.push('That relationship was funded before. Show a different one.');
-    const app: FundingApplication = { day: this.day, due: this.day + f.days, arrows: list, chain: fresh, success: !problems.length && !!fresh, problems, resolved: false };
+    const app: FundingApplication = { day: this.day, due: this.day + f.days, arrows: list, supported, chain: fresh, success: !problems.length && !!fresh, problems, resolved: false };
     this.applications.push(app);
     this.log.push({ day: this.day, kind: 'funding', text: `Applied for more funding (decision in ${f.days} days)` });
     return app;
+  }
+
+  /** Arrows from decided applications and whether each was supported; the latest verdict wins. */
+  pastArrows(): { from: string; to: string; supported: boolean }[] {
+    const out = new Map<string, { from: string; to: string; supported: boolean }>();
+    for (const app of this.applications)
+      if (app.resolved) app.arrows.forEach(([from, to], i) => out.set(`${from}>${to}`, { from, to, supported: app.supported[i] }));
+    return [...out.values()];
   }
 
   private decideFunding() {

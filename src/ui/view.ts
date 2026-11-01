@@ -26,8 +26,11 @@ export interface UiState {
   showOutcome: boolean;
   /** Debrief chart: a pond tile or the median of all of them, and up to four variables in fixed colour slots. */
   debrief: { tile: string; slots: (string | null)[]; table: boolean };
-  /** The funding application pop-up: arrows drawn so far, and the node an arrow is being drawn from. */
-  funding: { open: boolean; arrows: [string, string][]; pick: string | null };
+  /**
+   * The funding application pop-up. Two arrows only: `factor` limits the target (the red arrow),
+   * and `cause` drives the factor (the brown arrow).
+   */
+  funding: { open: boolean; factor: string | null; cause: string | null };
   /** A funding decision that has just arrived (index into game.applications), shown until closed. */
   decision: number | null;
 }

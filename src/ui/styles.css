@@ -1865,10 +1865,6 @@ button:focus-visible {
 .fn-node.target text {
   font-weight: 600;
 }
-.fn-node.picked rect {
-  stroke: var(--primary);
-  stroke-width: 3;
-}
 .fn-node:focus {
   outline: none;
 }
@@ -1886,15 +1882,72 @@ button:focus-visible {
 }
 .fa-line {
   fill: none;
-  stroke: var(--text-2);
-  stroke-width: 2;
+  stroke-width: 2.5;
 }
-.fa-headpath {
-  fill: var(--text-2);
+.fa.factor .fa-line {
+  stroke: #c2453a;
+}
+.fa.cause .fa-line {
+  stroke: #8a5a2b;
 }
 .fa:hover .fa-line {
-  stroke: var(--warn-text);
-  stroke-dasharray: 5 3;
+  stroke-dasharray: 6 3;
+}
+.fa-past path {
+  fill: none;
+}
+.fa-past.yes path {
+  stroke: #2f8a3e;
+  stroke-width: 4.5;
+}
+.fa-past.no path {
+  stroke: #a9b2af;
+  stroke-width: 2;
+  stroke-dasharray: 3 3;
+}
+.fn-node.factor rect {
+  stroke: #c2453a;
+  stroke-width: 2.5;
+}
+.fn-node.cause rect {
+  stroke: #8a5a2b;
+  stroke-width: 2.5;
+}
+.fund-key {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  font-size: 12px;
+  color: var(--text-2);
+}
+.fund-key li,
+.fund-list li > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.fk {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  border-top: 3px solid;
+  flex: none;
+}
+.fk.factor {
+  border-color: #c2453a;
+}
+.fk.cause {
+  border-color: #8a5a2b;
+}
+.fk.yes {
+  border-top-width: 5px;
+  border-color: #2f8a3e;
+}
+.fk.no {
+  border-top: 2px dashed #a9b2af;
 }
 .fund-hint {
   color: var(--muted);

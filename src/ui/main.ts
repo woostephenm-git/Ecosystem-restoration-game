@@ -38,7 +38,7 @@ const ui: UiState = {
   showBriefing: true,
   showOutcome: false,
   debrief: { tile: 'median', slots: ['plant_cover', 'carp', 'secchi', null], table: false },
-  funding: { open: false, arrows: [], pick: null },
+  funding: { open: false, factor: null, cause: null },
   decision: null,
 };
 
@@ -211,35 +211,34 @@ root.addEventListener('click', (e) => {
       ui.decision = null;
       break;
     case 'funding-open':
-      ui.funding = { open: true, arrows: [], pick: null };
+      ui.funding = { open: true, factor: null, cause: null };
       break;
     case 'funding-close':
       ui.funding.open = false;
       break;
     case 'funding-node': {
-      // First click picks the cause; the second draws an arrow to the effect (or removes it).
+      // The first click places the red arrow (factor → target); later clicks set or change
+      // the brown arrow (cause → factor).
       const f = ui.funding;
-      if (!f.pick) f.pick = arg;
-      else if (f.pick === arg) f.pick = null;
-      else {
-        const k = f.arrows.findIndex(([a, b]) => a === f.pick && b === arg);
-        if (k >= 0) f.arrows.splice(k, 1);
-        else f.arrows.push([f.pick, arg]);
-        f.pick = null;
-      }
+      if (!f.factor) f.factor = arg;
+      else if (arg !== f.factor) f.cause = arg;
       break;
     }
     case 'funding-remove':
-      ui.funding.arrows.splice(Number(arg), 1);
+      // Removing the red arrow takes the brown one with it, since it points at the factor.
+      if (arg === 'factor') ui.funding.factor = null;
+      ui.funding.cause = null;
       break;
-    case 'funding-clear':
-      ui.funding.arrows = [];
-      ui.funding.pick = null;
+    case 'funding-submit': {
+      const { factor, cause } = ui.funding;
+      if (factor && cause)
+        game.applyForFunding([
+          [factor, game.mission.funding!.target],
+          [cause, factor],
+        ]);
+      ui.funding = { open: false, factor: null, cause: null };
       break;
-    case 'funding-submit':
-      game.applyForFunding(ui.funding.arrows);
-      ui.funding = { open: false, arrows: [], pick: null };
-      break;
+    }
     case 'debrief':
       ui.showOutcome = false;
       ui.speed = 0;

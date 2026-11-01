@@ -57,6 +57,21 @@ describe('funding applications', () => {
     expect(g.canApplyForFunding().ok).toBe(true);
   });
 
+  it('records a verdict per arrow, shown on later boards once decided', () => {
+    const g = sampled();
+    const app = g.applyForFunding([
+      ['secchi', 'plant_cover'],
+      ['nitrate', 'secchi'],
+    ])!;
+    expect(app.supported).toEqual([true, false]);
+    expect(g.pastArrows()).toEqual([]);
+    g.advance(180);
+    expect(g.pastArrows()).toEqual([
+      { from: 'secchi', to: 'plant_cover', supported: true },
+      { from: 'nitrate', to: 'secchi', supported: false },
+    ]);
+  });
+
   it('needs a chain two steps deep', () => {
     const app = sampled().applyForFunding([['light_bed', 'plant_cover']])!;
     expect(app.success).toBe(false);

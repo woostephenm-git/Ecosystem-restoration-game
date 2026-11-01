@@ -78,30 +78,62 @@ function route(a: Node, b: Node, nodes: Node[], paired: boolean, H: number): num
   return [x1, y1, (x1 + x2) / 2 + nx * k, (y1 + y2) / 2 + ny * k, x2, y2];
 }
 
+/** Arrow styles: the two the player draws, and verdicts from past applications. */
+const ARROW = {
+  factor: '#c2453a',
+  cause: '#8a5a2b',
+  yes: '#2f8a3e',
+  no: '#a9b2af',
+} as const;
+
 export function fundingModal(game: Game, ui: UiState): string {
   const f = game.mission.funding!;
   const st = ui.funding;
   const nodes = layout(game);
   const byId = new Map(nodes.map((n) => [n.id, n]));
-  const arrows = st.arrows.filter(([a, b]) => byId.has(a) && byId.has(b));
   const H = boardHeight(nodes.length - 1);
   const name = (id: string) => byId.get(id)!.name;
+  const factor = st.factor && byId.has(st.factor) ? st.factor : null;
+  const cause = factor && st.cause && byId.has(st.cause) ? st.cause : null;
 
-  const lines = arrows
-    .map(([a, b], i) => {
-      const na = byId.get(a)!;
-      const nb = byId.get(b)!;
-      const [x1, y1, mx, my, x2, y2] = route(na, nb, nodes, st.arrows.some(([c, d]) => c === b && d === a), H);
-      const d = `M${x1.toFixed(1)} ${y1.toFixed(1)} Q${mx.toFixed(1)} ${my.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
-      return `<g class="fa" data-action="funding-remove:${i}"><title>${esc(`${name(a)} → ${name(b)}. Click to remove.`)}</title><path class="fa-hit" d="${d}"/><path class="fa-line" d="${d}" marker-end="url(#fa-head)"/></g>`;
+  const path = (a: string, b: string, paired: boolean) => {
+    const [x1, y1, mx, my, x2, y2] = route(byId.get(a)!, byId.get(b)!, nodes, paired, H);
+    return `M${x1.toFixed(1)} ${y1.toFixed(1)} Q${mx.toFixed(1)} ${my.toFixed(1)} ${x2.toFixed(1)} ${y2.toFixed(1)}`;
+  };
+
+  // Past verdicts sit underneath: bold green where the reviewers found support, grey where not.
+  const past = game
+    .pastArrows()
+    .filter((p) => byId.has(p.from) && byId.has(p.to))
+    .map((p) => {
+      const tip = `${name(p.from)} → ${name(p.to)}: ${p.supported ? 'supported' : 'not supported'} in an earlier application.`;
+      return `<g class="fa-past ${p.supported ? 'yes' : 'no'}"><title>${esc(tip)}</title><path d="${path(p.from, p.to, false)}" marker-end="url(#fa-${p.supported ? 'yes' : 'no'})"/></g>`;
+    })
+    .join('');
+
+  const drawn: { key: 'factor' | 'cause'; from: string; to: string }[] = [];
+  if (factor) drawn.push({ key: 'factor', from: factor, to: f.target });
+  if (factor && cause) drawn.push({ key: 'cause', from: cause, to: factor });
+  const lines = drawn
+    .map(({ key, from, to }) => {
+      const paired = drawn.some((d) => d.from === to && d.to === from);
+      const d = path(from, to, paired);
+      return `<g class="fa ${key}" data-action="funding-remove:${key}"><title>${esc(`${name(from)} → ${name(to)}. Click to remove.`)}</title><path class="fa-hit" d="${d}"/><path class="fa-line" d="${d}" marker-end="url(#fa-${key})"/></g>`;
     })
     .join('');
 
   const boxes = nodes
     .map((n) => {
-      const picked = st.pick === n.id;
-      const label = picked ? `${n.name}: selected. Choose what it drives.` : st.pick ? `Draw an arrow from ${name(st.pick)} to ${n.name}` : `Start an arrow from ${n.name}`;
-      return `<g class="fn-node ${n.target ? 'target' : ''} ${picked ? 'picked' : ''}" data-action="funding-node:${n.id}" role="button" tabindex="0" aria-label="${esc(label)}" aria-pressed="${picked}">
+      if (n.target) {
+        return `<g class="fn-node target"><rect x="${n.x - NODE_W / 2}" y="${n.y - NODE_H / 2}" width="${NODE_W}" height="${NODE_H}" rx="${NODE_H / 2}"/><text x="${n.x}" y="${n.y + 4}" text-anchor="middle">${esc(n.name)}</text></g>`;
+      }
+      const role = n.id === factor ? 'factor' : n.id === cause ? 'cause' : '';
+      const label = !factor
+        ? `${n.name} limits ${f.target_name.toLowerCase()}`
+        : n.id === factor
+          ? `${n.name}: chosen as the limiting factor`
+          : `${n.name} drives ${name(factor).toLowerCase()}`;
+      return `<g class="fn-node ${role}" ${n.id === factor ? `role="img"` : `data-action="funding-node:${n.id}" role="button" tabindex="0" aria-pressed="${!!role}"`} aria-label="${esc(label)}">
         <rect x="${n.x - NODE_W / 2}" y="${n.y - NODE_H / 2}" width="${NODE_W}" height="${NODE_H}" rx="${NODE_H / 2}"/>
         <text x="${n.x}" y="${n.y + 4}" text-anchor="middle">${esc(n.name)}</text>
       </g>`;
@@ -113,29 +145,49 @@ export function fundingModal(game: Game, ui: UiState): string {
     ? `<p class="fund-last ${last.success ? 'ok' : 'no'}"><strong>Last application ${last.success ? 'approved' : 'declined'}.</strong> ${esc(last.success ? `${fmtMoney(f.grant)} was added to your budget.` : last.problems.join(' '))}</p>`
     : '';
   const few = nodes.length < 4 ? `<p class="fund-note">You have sampled very little so far. Only sampled variables can go in an application.</p>` : '';
-  const hint = st.pick ? `Arrow from <strong>${esc(name(st.pick))}</strong>: click what it drives. Click it again to cancel.` : 'Click a variable, then click what it drives, to draw an arrow. Click an arrow to remove it.';
+  const target = esc(f.target_name.toLowerCase());
+  const hint = !factor
+    ? `<strong>Step 1 of 2.</strong> Click what limits ${target}.`
+    : !cause
+      ? `<strong>Step 2 of 2.</strong> Click what drives ${esc(name(factor).toLowerCase())}.`
+      : `Both arrows are placed. Click another variable to change what drives ${esc(name(factor).toLowerCase())}, or remove the red arrow to start again.`;
+  const markers = Object.entries(ARROW)
+    .map(([k, c]) => `<marker id="fa-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="${k === 'yes' ? 6 : 8}" markerHeight="${k === 'yes' ? 6 : 8}" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="${c}"/></marker>`)
+    .join('');
+  const pastArrows = game.pastArrows();
+  const key = (cls: string, text: string) => `<li><span class="fk ${cls}" aria-hidden="true"></span>${text}</li>`;
 
   return `<div class="modal-back"><div class="modal funding" role="dialog" aria-modal="true" aria-labelledby="fund-title">
     <div class="label">Parish council environment fund</div>
     <h1 id="fund-title">Apply for more funding</h1>
-    <p>The council will add <strong>${fmtMoney(f.grant)}</strong> to your budget if you can show what holds ${esc(f.target_name.toLowerCase())} back in this pond. Draw arrows from cause to effect, two steps deep: something that limits ${esc(f.target_name.toLowerCase())}, and what drives that.</p>
-    <p class="muted small">Applying is free. The decision takes ${f.days} days and the pond carries on meanwhile. If the reviewers find any arrow the evidence does not support, the application is turned down. Only variables you have sampled can be used.</p>
+    <p>The council will add <strong>${fmtMoney(f.grant)}</strong> to your budget if you can show what holds ${target} back in this pond, two steps deep: something that limits ${target}, and what drives that.</p>
+    <p class="muted small">Applying is free. The decision takes ${f.days} days and the pond carries on meanwhile. If the reviewers find either arrow is not supported by the evidence, the application is turned down. Only variables you have sampled can be used.</p>
     ${lastText}${few}
     <div class="fund-board">
       <svg viewBox="0 0 ${W} ${H}" role="group" aria-label="Variables you have sampled, and the arrows you have drawn">
-        <defs><marker id="fa-head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="fa-headpath"/></marker></defs>
-        ${lines}${boxes}
+        <defs>${markers}</defs>
+        ${past}${lines}${boxes}
       </svg>
     </div>
+    <ul class="fund-key">
+      ${key('factor', `Limits ${target}`)}
+      ${key('cause', 'Drives that factor')}
+      ${pastArrows.some((p) => p.supported) ? key('yes', 'Supported in an earlier application') : ''}
+      ${pastArrows.some((p) => !p.supported) ? key('no', 'Not supported in an earlier application') : ''}
+    </ul>
     <p class="fund-hint small" aria-live="polite">${hint}</p>
     ${
-      arrows.length
-        ? `<ul class="fund-list">${arrows.map(([a, b], i) => `<li><span>${esc(name(a))} → ${esc(name(b))}</span><button type="button" class="btn small" data-action="funding-remove:${i}" aria-label="Remove the arrow from ${esc(name(a))} to ${esc(name(b))}">Remove</button></li>`).join('')}</ul>`
+      drawn.length
+        ? `<ul class="fund-list">${drawn
+            .map(
+              ({ key: k, from, to }) =>
+                `<li><span><span class="fk ${k}" aria-hidden="true"></span>${esc(name(from))} → ${esc(name(to))}</span><button type="button" class="btn small" data-action="funding-remove:${k}" aria-label="Remove the arrow from ${esc(name(from))} to ${esc(name(to))}">Remove</button></li>`,
+            )
+            .join('')}</ul>`
         : ''
     }
     <div class="modal-actions">
-      <button type="button" class="btn primary" data-action="funding-submit" ${arrows.length ? '' : 'disabled'}>Submit application</button>
-      <button type="button" class="btn" data-action="funding-clear" ${arrows.length ? '' : 'disabled'}>Clear arrows</button>
+      <button type="button" class="btn primary" data-action="funding-submit" ${cause ? '' : 'disabled'}>Submit application</button>
       <button type="button" class="btn" data-action="funding-close">Cancel</button>
     </div>
   </div></div>`;
