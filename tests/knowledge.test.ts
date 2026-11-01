@@ -39,8 +39,11 @@ describe('knowledge model', () => {
     expect(k.state).toBe('measured');
     if (k.state === 'measured') expect(k.value).toBeCloseTo(g.sim.tile(TILE).values.carp, 0);
     expect(g.canSample('fish_survey', TILE)).toEqual({ ok: false, reason: 'Done today' });
+    g.sample('secchi_disk', TILE);
     g.advance(1);
-    expect(g.canSample('fish_survey', TILE).ok).toBe(true);
+    // Most methods can be repeated the next day; a fish survey has to wait 90 days.
+    expect(g.canSample('secchi_disk', TILE).ok).toBe(true);
+    expect(g.canSample('fish_survey', TILE).ok).toBe(false);
   });
 
   it('refuses sampling the budget cannot cover', () => {

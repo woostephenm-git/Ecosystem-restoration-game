@@ -20,7 +20,7 @@ export interface FactorReport {
 
 export interface LogEntry {
   day: number;
-  kind: 'sample' | 'intervention' | 'event' | 'outcome';
+  kind: 'sample' | 'intervention' | 'event' | 'outcome' | 'funding';
   text: string;
 }
 
@@ -46,6 +46,19 @@ export interface DebriefEvent {
   day: number;
   duration: number;
   tiles: string[];
+}
+
+/** An application for more funding: the player's arrows, judged when submitted, decided later. */
+export interface FundingApplication {
+  day: number;
+  due: number;
+  arrows: [string, string][];
+  /** The two-step chain the application was judged on, [cause, factor], if one qualified. */
+  chain: [string, string] | null;
+  success: boolean;
+  /** Why it was turned down, in plain words. Shown when the decision arrives. */
+  problems: string[];
+  resolved: boolean;
 }
 
 export interface Availability {
@@ -86,6 +99,8 @@ export class Game {
   readonly history = { days: [] as number[], values: new Map<string, Map<string, number[]>>() };
   samplesTaken = 0;
   outcome: Outcome | null = null;
+  readonly applications: FundingApplication[] = [];
+  private activeLinkCache = new Map<string, boolean>();
   /** True pond-wide means when the mission clock started, for before-and-after comparison. */
   readonly startSurvey: Record<string, number>;
 
@@ -133,13 +148,21 @@ export class Game {
 
   /** Days since a method was last run on a tile, or null if never. */
   sampledDaysAgo(methodId: string, tileId: string): number | null {
-    const d = this.sampled.get(tileId)?.get(methodId);
-    return d === undefined ? null : this.day - d;
+    // A water-body method was done whenever it was last done on any pond tile.
+    const tiles = this.data.methods.get(methodId)?.scope === 'water_body' ? this.waterTileIds() : [tileId];
+    let last: number | undefined;
+    for (const id of tiles) {
+      const d = this.sampled.get(id)?.get(methodId);
+      if (d !== undefined && (last === undefined || d > last)) last = d;
+    }
+    return last === undefined ? null : this.day - last;
   }
 
   canSample(methodId: string, tileId: string): Availability {
     const m = this.data.methods.get(methodId)!;
-    if (this.sampledDaysAgo(methodId, tileId) === 0) return { ok: false, reason: 'Done today' };
+    const ago = this.sampledDaysAgo(methodId, tileId);
+    if (ago === 0) return { ok: false, reason: 'Done today' };
+    if (m.rest_days && ago !== null && ago < m.rest_days) return { ok: false, reason: `Allowed again in ${m.rest_days - ago} days` };
     if (m.cost > this.budget) return { ok: false, reason: 'Not enough budget' };
     return { ok: true };
   }
@@ -243,6 +266,7 @@ export class Game {
       }
       this.knowledge.observe();
       this.record();
+      this.decideFunding();
       if (!this.outcome && this.day >= this.deadlineDay) this.evaluateOutcome();
     }
   }
@@ -274,6 +298,103 @@ export class Game {
 
   isDiscovered(link: NormalLink): boolean {
     return link.discovered_by.every((id) => this.measuredEver(id));
+  }
+
+  pendingApplication(): FundingApplication | null {
+    return this.applications.find((a) => !a.resolved) ?? null;
+  }
+
+  canApplyForFunding(): Availability {
+    if (!this.mission.funding) return { ok: false, reason: 'Not offered in this mission' };
+    if (this.outcome) return { ok: false, reason: 'The mission has ended' };
+    const p = this.pendingApplication();
+    if (p) return { ok: false, reason: `Decision due in ${p.due - this.day} days` };
+    return { ok: true };
+  }
+
+  /** What a funding application can show: the target, and every variable the player has sampled. */
+  fundingNodes(): string[] {
+    const target = this.mission.funding!.target;
+    return [target, ...this.visibleVariables().map((v) => v.id).filter((id) => id !== target && this.measuredEver(id))];
+  }
+
+  /**
+   * Does the simulation carry an effect from `a` to `b` on this map? True if a chain of links
+   * runs from one to the other, passing only through derived variables (Secchi depth, light at
+   * the bed), and every link in it has some effect on at least one pond tile today.
+   */
+  supportsArrow(a: string, b: string): boolean {
+    if (a === b) return false;
+    const seen = new Set([a]);
+    const queue = [a];
+    while (queue.length) {
+      const x = queue.shift()!;
+      for (const l of this.data.links) {
+        if (l.to === x || !l.from.includes(x) || !this.linkActive(l, x)) continue;
+        if (l.to === b) return true;
+        if (this.data.variables.get(l.to)!.kind === 'derived' && !seen.has(l.to)) {
+          seen.add(l.to);
+          queue.push(l.to);
+        }
+      }
+    }
+    return false;
+  }
+
+  private linkActive(link: NormalLink, sourceId: string): boolean {
+    const key = `${link.id}|${sourceId}|${this.day}`;
+    let on = this.activeLinkCache.get(key);
+    if (on === undefined) {
+      on = this.waterTileIds().some((id) => this.linkDirection(id, link, sourceId) !== 0);
+      this.activeLinkCache.set(key, on);
+    }
+    return on;
+  }
+
+  /**
+   * Submit an application. Every arrow must be one the simulation supports, and the arrows must
+   * include a chain two steps deep into the target that has not been funded before. The result
+   * is fixed now and revealed when the decision is due, so arrows cannot be tried one by one.
+   */
+  applyForFunding(arrows: [string, string][]): FundingApplication | null {
+    if (!this.canApplyForFunding().ok) return null;
+    const f = this.mission.funding!;
+    const nodes = new Set(this.fundingNodes());
+    const keyed = new Map(arrows.filter(([a, b]) => a !== b && nodes.has(a) && nodes.has(b)).map((ar) => [ar.join('>'), ar]));
+    const list = [...keyed.values()];
+    const name = (id: string) => (id === f.target ? f.target_name : this.data.variables.get(id)!.name).toLowerCase();
+    const problems: string[] = [];
+    const ok = new Set<string>();
+    for (const [a, b] of list) {
+      if (a !== f.target && this.supportsArrow(a, b)) ok.add(`${a}>${b}`);
+      else problems.push(`The reviewers found no evidence that ${name(a)} drives ${name(b)} in this pond.`);
+    }
+    const funded = new Set(this.applications.filter((x) => x.success && x.chain).map((x) => x.chain!.join('>')));
+    const chains = list
+      .filter(([, b]) => b === f.target)
+      .flatMap(([x]) => list.filter(([, b]) => b === x).map(([y]) => [y, x] as [string, string]))
+      .filter(([y, x]) => ok.has(`${y}>${x}`) && ok.has(`${x}>${f.target}`));
+    const fresh = chains.find((c) => !funded.has(c.join('>'))) ?? null;
+    if (!chains.length && !problems.length)
+      problems.push(`The application needs a chain two steps deep: something that limits ${name(f.target)}, and what drives it.`);
+    else if (chains.length && !fresh) problems.push('That relationship was funded before. Show a different one.');
+    const app: FundingApplication = { day: this.day, due: this.day + f.days, arrows: list, chain: fresh, success: !problems.length && !!fresh, problems, resolved: false };
+    this.applications.push(app);
+    this.log.push({ day: this.day, kind: 'funding', text: `Applied for more funding (decision in ${f.days} days)` });
+    return app;
+  }
+
+  private decideFunding() {
+    const app = this.pendingApplication();
+    if (!app || this.day < app.due) return;
+    app.resolved = true;
+    const grant = this.mission.funding!.grant;
+    if (app.success) this.budget += grant;
+    this.log.push({
+      day: this.day,
+      kind: 'funding',
+      text: app.success ? `Funding application approved: ${fmtMoney(grant)} added to the budget` : `Funding application declined. ${app.problems[0] ?? ''}`.trim(),
+    });
   }
 
   /** Append today's true value of every visible variable on every pond tile to the history. */

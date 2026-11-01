@@ -123,6 +123,8 @@ export const MethodSchema = z.object({
   cost: z.number().min(0),
   reveals: z.array(id).min(1),
   scope: z.enum(['tile', 'water_body']),
+  /** Days before the method can be repeated (a fish survey needs a permit and stresses the fish). */
+  rest_days: z.number().int().positive().optional(),
   mark: z.object({ kind: z.enum(['secchi', 'bottle', 'probe', 'net', 'trap', 'core']), label: z.string() }),
 });
 
@@ -255,6 +257,11 @@ export const MissionSchema = z.object({
   hints: z.array(z.object({ id, when: z.array(ConditionSchema).min(1), text: z.string() })),
   /** Pond-wide means recorded at the start and by the final survey, shown side by side. */
   final_survey: z.array(id).min(1),
+  /**
+   * Applying for more funding: the player maps what limits `target`, two steps deep. Free,
+   * decided after `days`, and worth `grant` if every arrow is one the simulation supports.
+   */
+  funding: z.object({ grant: z.number().min(0), days: z.number().int().positive(), target: id, target_name: z.string() }).optional(),
   /** Shown when the objective is met. Text may use {variable_id}, {target}, {budget_left} and {date}. */
   success_letter: z
     .object({

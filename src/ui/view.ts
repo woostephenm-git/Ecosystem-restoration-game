@@ -6,6 +6,7 @@ import type { Known } from '../sim/knowledge';
 import type { NormalLink } from '../sim/loader';
 import type { Variable } from '../sim/schema';
 import { DRAW_W, ZONE_H, drawTile } from './drawing';
+import { fundingButton, fundingModal } from './fundingView';
 import { gauge } from './gauge';
 
 export interface UiState {
@@ -25,6 +26,8 @@ export interface UiState {
   showOutcome: boolean;
   /** Debrief chart: a pond tile or the median of all of them, and up to four variables in fixed colour slots. */
   debrief: { tile: string; slots: (string | null)[]; table: boolean };
+  /** The funding application pop-up: arrows drawn so far, and the node an arrow is being drawn from. */
+  funding: { open: boolean; arrows: [string, string][]; pick: string | null };
 }
 
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -94,7 +97,7 @@ export function renderTile(game: Game, ui: UiState): string {
 }
 
 export function modals(game: Game, ui: UiState): string {
-  return `${ui.showBriefing ? briefing(game) : ''}${ui.showOutcome && game.outcome ? outcomeModal(game) : ''}`;
+  return `${ui.showBriefing ? briefing(game) : ''}${ui.showOutcome && game.outcome ? outcomeModal(game) : ''}${ui.funding.open && game.mission.funding ? fundingModal(game, ui) : ''}`;
 }
 
 /** A small clickable copy of the grid, for jumping between tiles in the investigation view. */
@@ -318,6 +321,7 @@ export function interventionsPanel(game: Game, tiles: string[], selectionLabel?:
   return `<div class="panel-block">
     <div class="block-head"><span class="label">Interventions</span><span class="sub">Act once you understand what limits the system. Order matters.</span></div>
     <div class="grid4">${buttons}</div>
+    ${fundingButton(game)}
   </div>`;
 }
 
@@ -339,13 +343,27 @@ export function objectivePanel(game: Game): string {
   </div>`;
 }
 
+/** Water exchange is the pathway that carries sediment, nutrients and algae between tiles. */
+function isPathway(game: Game, id: string): boolean {
+  return game.data.variables.get(id)?.lateral?.process === 'water_exchange';
+}
+
 function linkItems(game: Game, ui: UiState, v: Variable, dir: 'in' | 'out') {
   const links = game.data.links.filter((l) => (dir === 'in' ? l.to === v.id && l.from.some((f) => f !== v.id) : l.from.includes(v.id) && l.to !== v.id));
   const found = links.filter((l) => game.isDiscovered(l));
-  const items: { link: NormalLink; other: string; sign: number }[] = [];
+  const items: { link: NormalLink; other: string; via: string | null; sign: number }[] = [];
   for (const l of found) {
-    if (dir === 'in') for (const src of new Set(l.from)) src !== v.id && items.push({ link: l, other: src, sign: game.linkDirection(ui.tileId, l, src) });
-    else items.push({ link: l, other: l.to, sign: game.linkDirection(ui.tileId, l, v.id) });
+    if (dir === 'out') {
+      items.push({ link: l, other: l.to, via: null, sign: game.linkDirection(ui.tileId, l, v.id) });
+      continue;
+    }
+    // When water exchange carries something in, one row names what it carries and shows the
+    // exchange as the pathway, so neither appears twice. Other links get a row per input.
+    const inputs = [...new Set(l.from)].filter((f) => f !== v.id);
+    const pathway = inputs.find((f) => isPathway(game, f));
+    const carried = inputs.filter((f) => f !== pathway);
+    if (pathway && carried.length === 1) items.push({ link: l, other: carried[0], via: pathway, sign: game.linkDirection(ui.tileId, l, carried[0]) });
+    else for (const src of inputs) items.push({ link: l, other: src, via: null, sign: game.linkDirection(ui.tileId, l, src) });
   }
   return { items, hidden: links.length - found.length, total: links.length };
 }
@@ -361,12 +379,13 @@ function selectedPanel(game: Game, ui: UiState): string {
   const list = (dir: 'in' | 'out') => {
     const { items, hidden, total } = linkItems(game, ui, v, dir);
     const btns = items
-      .map(({ link, other, sign }) => {
+      .map(({ link, other, via, sign }) => {
         const ov = game.data.variables.get(other)!;
+        const viaText = via ? ` <span class="lvia">via ${esc(game.data.variables.get(via)!.name.toLowerCase())}</span>` : '';
         const verb = sign > 0 ? 'raises' : sign < 0 ? 'lowers' : 'affects';
         const arrow = sign > 0 ? '↑' : sign < 0 ? '↓' : '·';
         return `<button type="button" class="link" data-action="select:${other}">
-          <span class="lname">${esc(ov.name)}</span>
+          <span class="lname">${esc(ov.name)}${viaText}</span>
           <span class="llabel">${esc(link.label)} · ${link.strength} · <span aria-hidden="true">${arrow}</span> ${dir === 'in' ? verb + ' this' : verb + ' it'}</span>
           <span class="lbar ${dir}" style="width:${STRENGTH_W[link.strength]}%"></span>
         </button>`;
@@ -551,7 +570,6 @@ function boundaryPanel(game: Game): string {
   const barrier = barrierState(game);
   return `<div class="box">
     <div class="label">Weather and inflow</div>
-    <div class="bsub">Boundary conditions: set outside the pond. You cannot change them in this mission.</div>
     <div class="bsub strong">Weather</div>
     ${climate.map(row).join('')}
     <div class="bsub strong">Inflow from the ${esc(g.map.inlets.map((i) => i.name).join(', '))}</div>

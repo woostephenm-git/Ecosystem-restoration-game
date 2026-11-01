@@ -26,7 +26,8 @@
   {
     "id": "fish_survey",
     "name": "Fish survey",
-    "cost": 1200,
+    "cost": 300,
+    "rest_days": 90,
     "reveals": ["carp"],
     "scope": "water_body",
     "mark": { "kind": "net", "label": "Fish survey" }

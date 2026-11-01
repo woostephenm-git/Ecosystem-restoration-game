@@ -20,14 +20,14 @@
   },
   "methods": ["secchi_disk", "water_grab", "oxygen_profile", "fish_survey", "inflow_fish_trap", "sediment_core"],
   "interventions": [
-    "plant_submerged",
-    "carp_removal",
-    "carp_barrier",
-    "alum_treatment",
     "barley_straw",
+    "carp_removal",
+    "raise_weir",
+    "plant_submerged",
     "algaecide",
-    "nitrate_agreement",
-    "raise_weir"
+    "alum_treatment",
+    "carp_barrier",
+    "nitrate_agreement"
   ],
   "measurement_fresh_days": 30,
   "limiting_factors": {
@@ -148,6 +148,7 @@
       "text": "Most of the murk is sediment, not algae. Wind alone rarely keeps this much mud in suspension."
     }
   ],
+  "funding": { "grant": 2000, "days": 180, "target": "plant_cover", "target_name": "Plant establishment" },
   "final_survey": ["plant_cover", "secchi", "light_bed", "suspended_sediment", "chla", "total_p", "carp"],
   "success_letter": {
     "from": "Clearwater Parish Council",

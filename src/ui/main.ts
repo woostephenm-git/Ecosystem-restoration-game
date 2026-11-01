@@ -38,6 +38,7 @@ const ui: UiState = {
   showBriefing: true,
   showOutcome: false,
   debrief: { tile: 'median', slots: ['plant_cover', 'carp', 'secchi', null], table: false },
+  funding: { open: false, arrows: [], pick: null },
 };
 
 const root = document.getElementById('app')!;
@@ -195,6 +196,36 @@ root.addEventListener('click', (e) => {
     case 'outcome-close':
       ui.showOutcome = false;
       break;
+    case 'funding-open':
+      ui.funding = { open: true, arrows: [], pick: null };
+      break;
+    case 'funding-close':
+      ui.funding.open = false;
+      break;
+    case 'funding-node': {
+      // First click picks the cause; the second draws an arrow to the effect (or removes it).
+      const f = ui.funding;
+      if (!f.pick) f.pick = arg;
+      else if (f.pick === arg) f.pick = null;
+      else {
+        const k = f.arrows.findIndex(([a, b]) => a === f.pick && b === arg);
+        if (k >= 0) f.arrows.splice(k, 1);
+        else f.arrows.push([f.pick, arg]);
+        f.pick = null;
+      }
+      break;
+    }
+    case 'funding-remove':
+      ui.funding.arrows.splice(Number(arg), 1);
+      break;
+    case 'funding-clear':
+      ui.funding.arrows = [];
+      ui.funding.pick = null;
+      break;
+    case 'funding-submit':
+      game.applyForFunding(ui.funding.arrows);
+      ui.funding = { open: false, arrows: [], pick: null };
+      break;
     case 'debrief':
       ui.showOutcome = false;
       ui.speed = 0;
@@ -241,6 +272,17 @@ document.addEventListener('keydown', (e) => {
     draw();
     return;
   }
+  // Nodes on the funding board are SVG groups acting as buttons.
+  if ((e.key === 'Enter' || e.key === ' ') && el instanceof SVGElement && el.getAttribute('role') === 'button') {
+    e.preventDefault();
+    el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    return;
+  }
+  if (e.key === 'Escape' && ui.funding.open) {
+    ui.funding.open = false;
+    draw();
+    return;
+  }
   if (e.key === 'Escape' && ui.drawerOpen && !ui.showBriefing && !ui.showOutcome) {
     setDrawer(false);
     return;
@@ -261,7 +303,7 @@ function frame() {
   const dt = Math.min(1, (now - last) / 1000);
   last = now;
   const rate = DAYS_PER_SECOND[ui.speed];
-  if (rate && !ui.showBriefing && !ui.showOutcome && ui.screen !== 'debrief') {
+  if (rate && !ui.showBriefing && !ui.showOutcome && !ui.funding.open && ui.screen !== 'debrief') {
     carry += dt * rate;
     const days = Math.floor(carry);
     if (days > 0) {
