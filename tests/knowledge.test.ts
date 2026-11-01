@@ -12,8 +12,7 @@ const status = (g: Game, id: string) => g.limitingFactors(TILE).find((f) => f.id
 describe('knowledge model', () => {
   it('starts with the designed knowledge states', () => {
     const g = newGame();
-    // Carp show only as ripples and mud plumes until surveyed: a coarse estimate.
-    expect(g.known(TILE, 'carp').state).toBe('estimate');
+    expect(g.known(TILE, 'carp').state).toBe('unknown');
     expect(g.known(TILE, 'water_depth').state).toBe('measured');
     expect(g.known(TILE, 'nitrate').state).toBe('estimate');
     // Secchi is coarsely visible as murky water.
@@ -56,8 +55,7 @@ describe('knowledge model', () => {
     g.sample('fish_survey', TILE);
     const k0 = g.known(TILE, 'carp');
     g.intervene('carp_removal', TILE);
-    // Within the freshness window, so the survey still stands in for the visual estimate.
-    g.advance(20);
+    g.advance(40);
     const k1 = g.known(TILE, 'carp');
     expect(k1).toEqual(k0);
     expect(g.sim.tile(TILE).values.carp).toBeLessThan((k0 as { value: number }).value / 2);
@@ -82,7 +80,7 @@ describe('knowledge model', () => {
 
   it('limiting factors follow knowledge, not true state', () => {
     const g = newGame();
-    expect(status(g, 'carp')).toBe('LIKELY');
+    expect(status(g, 'carp')).toBe('SUSPECTED');
     expect(status(g, 'nutrients')).toBe('UNKNOWN');
     g.sample('secchi_disk', TILE);
     expect(status(g, 'light')).toBe('LIMITING');

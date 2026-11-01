@@ -37,8 +37,6 @@ export interface TileView {
   turbidity: number | null;
   /** Visible submerged plant cover, 0 to 1. */
   cover: number;
-  /** Ripple intensity from what can be seen of fish activity, 0 to 3. */
-  carpLevel: number;
   /** Measured carp biomass (kg/ha) once surveyed; fish are only drawn then. */
   carpMeasured: number | null;
   /** Knowledge overlay for this tile, or null when no overlay is shown. */
@@ -256,9 +254,6 @@ export class MapScene {
   private terrainMesh!: THREE.Mesh;
 
   /* ---------------- Water ---------------- */
-  /** Fish wakes alive at once. Each lives WAKE_LIFE seconds. */
-  private readonly MAX_WAKES = 16;
-  private readonly WAKE_LIFE = 7;
   private turbData!: Uint8Array<ArrayBuffer>;
   private turbTex!: THREE.DataTexture;
   private waterU = {
@@ -272,10 +267,6 @@ export class MapScene {
     uFoam: { value: new THREE.Color() },
     uSun: { value: new THREE.Vector3() },
     uViewDir: { value: new THREE.Vector3(1, 1, 1).normalize() },
-    /** Per wake: start x, start z, heading (radians), birth time. */
-    uWake: { value: Array.from({ length: 16 }, () => new THREE.Vector4(0, 0, 0, -100)) },
-    /** Per wake: strength, 0 when unused. */
-    uWakeK: { value: Array.from({ length: 16 }, () => 0) },
   };
   private buildWater() {
     const WSPAN = this.wmax - this.wmin, HALF = this.HALF;
@@ -298,7 +289,6 @@ export class MapScene {
     this.waterU.uDeep.value.copy(COL.water_deep);
     this.waterU.uTurbid.value.copy(COL.water_turbid);
     this.waterU.uFoam.value.copy(COL.foam);
-    const MAX = this.MAX_WAKES, LIFE = this.WAKE_LIFE.toFixed(1);
     const mat = new THREE.ShaderMaterial({
       uniforms: { ...this.shared, ...this.waterU },
       transparent: true,
@@ -316,48 +306,18 @@ export class MapScene {
         `
         uniform sampler2D uTurbTex; uniform float uTurbOut; uniform float uN;
         uniform vec3 uShallow; uniform vec3 uDeep; uniform vec3 uTurbid; uniform vec3 uFoam;
-        uniform vec3 uSun; uniform vec3 uViewDir; uniform vec4 uWake[${MAX}]; uniform float uWakeK[${MAX}]; varying vec3 vW; varying float vDepth;
+        uniform vec3 uSun; uniform vec3 uViewDir; varying vec3 vW; varying float vDepth;
         void main(){
           vec3 n = normalize(cross(dFdx(vW), dFdy(vW))); if (n.y < 0.0) n = -n;
           float d = max(vDepth, 0.0);
           vec2 mp = vW.xz + uHalf;
           float uTurbidity = (mp.x >= 0.0 && mp.y >= 0.0 && mp.x <= uN && mp.y <= uN) ? texture2D(uTurbTex, mp / uN).r : uTurbOut;
-          // Carp feeding just under the surface: a dark shape cruising slowly, a V-shaped
-          // bow wake behind it, and a widening plume of mud stirred up from the bed.
-          float sw = 0.0, plume = 0.0, shade = 0.0;
-          for (int i = 0; i < ${MAX}; i++) {
-            float k = uWakeK[i];
-            if (k <= 0.0) continue;
-            vec4 s = uWake[i];
-            float age = uTime - s.w;
-            if (age < 0.0 || age > ${LIFE}) continue;
-            vec2 dir = vec2(cos(s.z), sin(s.z));
-            vec2 side = vec2(-dir.y, dir.x);
-            vec2 head = s.xy + dir * 0.045 * age + side * sin(age * 0.8 + s.z * 3.0) * 0.03;
-            vec2 dv = vW.xz - head;
-            float along = dot(dv, -dir);
-            float perp = dot(dv, side);
-            if (along < -0.15 || along > 0.9 || abs(perp) > 0.45) continue;
-            float fade = smoothstep(0.0, 1.0, age) * (1.0 - smoothstep(${LIFE} - 2.0, ${LIFE}, age));
-            shade += k * fade * exp(-(pow(along / 0.09, 2.0) + pow(perp / 0.034, 2.0)));
-            float behind = max(along, 0.0);
-            float arm = abs(perp) - behind * 0.34;
-            sw += k * fade * exp(-pow(arm / 0.011, 2.0)) * smoothstep(0.0, 0.05, along) * exp(-behind * 4.5);
-            // A narrow, soft trail of silt that lingers and widens slowly behind the fish.
-            float w = 0.03 + behind * 0.07;
-            float wob = sin(behind * 9.0 + s.z * 5.0) * 0.012;
-            plume += k * fade * exp(-pow(perp - wob, 2.0) / (w * w)) * smoothstep(0.0, 0.08, along) * exp(-behind * 1.4) * 0.8;
-          }
           vec3 clearC = mix(uShallow, uDeep, smoothstep(0.0, 1.8, d));
-          vec3 base = mix(clearC, uTurbid, clamp(uTurbidity + plume*0.4, 0.0, 1.0));
-          // Stirred-up mud is darker and browner than the general murk, so it shows even in turbid water.
-          base = mix(base, uTurbid * vec3(0.62, 0.55, 0.45), clamp(plume, 0.0, 1.0) * 0.45);
-          base *= 1.0 - clamp(shade, 0.0, 1.0) * 0.55;
+          vec3 base = mix(clearC, uTurbid, clamp(uTurbidity, 0.0, 1.0));
           float diff = clamp(dot(n, uSun), 0.0, 1.0);
           vec3 col = base * (0.62 + 0.5 * diff);
           vec3 hv = normalize(uSun + uViewDir);
           col += vec3(pow(max(dot(n, hv), 0.0), 48.0) * 0.35);
-          col += uFoam * clamp(sw, 0.0, 1.0) * 0.7;
           vec2 fv = flowAt(vW.xz); float fsp = length(fv);
           float fph0 = fract(uTime / 2.0), fph1 = fract(uTime / 2.0 + 0.5), fw = abs(fph0 * 2.0 - 1.0);
           vec2 fp = vW.xz * 7.0;
@@ -369,7 +329,6 @@ export class MapScene {
           float k = mix(0.55, 6.5, uTurbidity);
           float a = mix(0.12, 0.9, 1.0 - exp(-d * k));
           a = max(a, (0.12 + 0.8*uTurbidity) * smoothstep(0.0, 0.12, d));
-          a = clamp(a + plume*0.2 + sw*0.15 + shade*0.25, 0.0, 1.0);
           col = mix(col, uFoam, foam * 0.7);
           a = max(a, foam * 0.75);
           gl_FragColor = vec4(col, a);
@@ -523,8 +482,6 @@ export class MapScene {
   /* ---------------- Fish and ripples ---------------- */
   private fishMesh!: THREE.InstancedMesh;
   private schools: { members: { x: number; z: number; vx: number; vz: number; s: number; ph: number }[]; tx: number; tz: number; timer: number }[] = [];
-  private wakeIdx = 0;
-  private wakeClock = 0;
   private buildFish() {
     const rec = fishGeo();
     this.fishMesh = new THREE.InstancedMesh(rec.geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide }), 500);
@@ -636,22 +593,6 @@ export class MapScene {
     this.fishMesh.count = idx;
     this.fishMesh.instanceMatrix.needsUpdate = true;
 
-    // Wakes and mud plumes: the coarse, free cue of fish activity (decision 7), tile by tile.
-    // About one new wake every couple of seconds at most, more where more fish are suspected.
-    if (dt > 0 && tiles.length) {
-      const total = tiles.reduce((s, x) => s + x.carpLevel, 0);
-      const maxRate = (this.MAX_WAKES / this.WAKE_LIFE) * 0.8;
-      this.wakeClock -= dt * maxRate * (total / (tiles.length * 3));
-      while (this.wakeClock < 0 && total > 0) {
-        this.wakeClock += 1;
-        let r = rand() * total;
-        const tile = tiles.find((x) => (r -= x.carpLevel) < 0) ?? tiles[0];
-        const x = tile.col + 0.2 + rand() * 0.6, z = tile.row + 0.2 + rand() * 0.6;
-        this.waterU.uWake.value[this.wakeIdx].set(x - this.HALF, z - this.HALF, rand() * Math.PI * 2, t);
-        this.waterU.uWakeK.value[this.wakeIdx] = (0.55 + 0.15 * tile.carpLevel) * (0.8 + rand() * 0.4);
-        this.wakeIdx = (this.wakeIdx + 1) % this.MAX_WAKES;
-      }
-    }
   }
 
   /* ---------------- Visual flow field (bench solver, for surface texture and drifting specks) ---------------- */

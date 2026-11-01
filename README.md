@@ -51,7 +51,7 @@ scripts/              map generation, tuning and profiling helpers
 - `scripts/generate-map.ts` runs the bench's terrain formula once. It writes per-tile data (`data/maps/clearwater_pond.json`) and a fine heightfield (`data/terrain/clearwater_pond.json`). Both are ordinary data and can be hand-edited afterwards.
 - A tile is water if its mean depth is over 0.1 m, or if a channel runs through it. Channels are narrower than a 25 m tile, so this keeps the inlet connected to the pond.
 - **Clearwater Pond** is 35 tiles (about 2.2 ha, up to 1.5 m deep), from the west inlet (A5) to the east outlet (L8). A small hollow pond and all the land are scenery in Mission 1. You can inspect them (elevation, land cover, where runoff drains), but they are not simulated.
-- The 3D view draws only observable state and knowledge: water colour from visible clarity, submerged plants from visible cover, ripples and mud plumes as a rough fish cue, and fish once surveyed. Reeds, lilies, grass and trees are scenery placed by depth band, kept off simulated pond tiles.
+- The 3D view draws only observable state and knowledge: water colour from visible clarity, submerged plants from visible cover, and fish once surveyed. Reeds, lilies, grass and trees are scenery placed by depth band, kept off simulated pond tiles.
 - Controls:
   - Click a tile to select it; click it again (or double-click, or press Enter) to investigate.
   - Shift-click or Shift-drag adds pond tiles to the planting selection.
@@ -72,7 +72,7 @@ These were marked Open or Proposed in the design doc, or decided in review. Each
 - **Rates that scale with tile size:** mixing, carp movement and plant spread are diffusivities in m²/day, divided by tile area. Changing the tile size keeps them physical.
 - **Integration:** daily stocks take as many substeps as the fastest exchange needs, so rate × step stays under 0.8. Spin-up runs once per mission with a fixed seed and is cached; the player's seed drives everything after it.
 - **Lateral processes:** the map pass writes `lateral` variables (water exchange, incoming concentrations, carp arriving and leaving, plant fragments arriving), which ordinary links read. Each one is a weighted sum of other tiles' values and boundary values, so the knowledge model can work out what is known about it.
-- **Carp wakes:** carp are a coarse observable. Bow wakes and trails of stirred-up mud give none / some / many (0–40, 40–150, 150–1000 kg/ha) for free, which makes carp a LIKELY limiting factor from the start; a survey gives the number.
+- **Carp are hidden until surveyed:** nothing on the map hints at them (surface cues were tried and dropped). Murky water makes them a SUSPECTED limiting factor; a fish survey gives the number and draws the fish.
 - **Sampling costs:** per-tile methods are cheap because a 35-tile pond needs sampling in many places (Secchi $15, water grab $80, oxygen profile $120, sediment core $300). Whole-pond methods keep their price (fish survey $1,200, inflow fish trap $300).
 - **Red herrings:** four plausible interventions that do not fix this pond: barley straw, algaecide, an upstream nitrate agreement, and raising the outlet weir (which backfires by cutting light at the bed). Each carries a `design_note` for instructors that players never see.
 - **Scopes:** planting is per tile ($300 each, and the whole selection at once on the map). Carp removal, the barrier and alum act on the whole pond. Fish surveys and the inflow fish trap cover the whole water body. Other sampling covers one tile.
@@ -80,6 +80,7 @@ These were marked Open or Proposed in the design doc, or decided in review. Each
 - **Scales:** every variable has a typical range (`scale` in `data/variables.json`), with an optional reference mark. Gauges show low, mid or high by thirds of that range.
 - **Measurement staleness:** visual observations update daily. Coarse-visible variables fall back to a visual estimate 30 days after a measurement. Lab-only variables keep their last measurement and are tagged with their age.
 - **Themes:** light on the map, ochre in the investigation view.
+- **Mission drawer:** the objective, weather and inflow (the boundary conditions) and the field log slide down from a tab under the top bar, which summarises the objective while closed.
 
 ## Model notes
 

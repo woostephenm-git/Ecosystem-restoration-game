@@ -6,8 +6,12 @@ export function fmt(v: Variable, x: number): string {
 }
 
 export function fmtUnit(v: Variable, x: number): string {
-  const unit = v.unit.startsWith('%') || v.unit.startsWith('/') ? v.unit : ` ${v.unit}`;
-  return `${fmt(v, x)}${unit}`;
+  return withUnit(v, fmt(v, x));
+}
+
+/** Append the variable's unit to already formatted text: "12 mg/L", but "12%" and "0.3/day". */
+export function withUnit(v: Variable, text: string): string {
+  return v.unit.startsWith('%') || v.unit.startsWith('/') ? `${text}${v.unit}` : `${text} ${v.unit}`;
 }
 
 export function fmtRange(v: Variable, lo: number, hi: number): string {

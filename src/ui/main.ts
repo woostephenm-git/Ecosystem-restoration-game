@@ -32,6 +32,7 @@ const ui: UiState = {
   selected: game.mission.objective.variable,
   overlay: 'surface',
   selection: [centre.id],
+  drawerOpen: false,
   speed: 0,
   showBriefing: true,
   showOutcome: false,
@@ -114,6 +115,12 @@ function draw() {
   if (focused) (root.querySelector(`[data-action="${CSS.escape(focused)}"]`) as HTMLElement | null)?.focus();
 }
 
+function setDrawer(open: boolean) {
+  ui.drawerOpen = open;
+  root.querySelector('.drawer-wrap')?.classList.toggle('open', open);
+  root.querySelector('.drawer-tab')?.setAttribute('aria-expanded', String(open));
+}
+
 /** Light theme on the map, ochre in the investigation view. */
 function theme() {
   document.documentElement.dataset.theme = ui.screen === 'map' ? 'light' : 'ochre';
@@ -132,6 +139,11 @@ root.addEventListener('click', (e) => {
   const el = (e.target as Element).closest<HTMLElement | SVGElement>('[data-action]');
   if (!el || (el as HTMLButtonElement).disabled) return;
   const [action, arg] = el.dataset.action!.split(':');
+  if (action === 'drawer') {
+    // Toggle in place rather than re-rendering, so the drawer can slide.
+    setDrawer(!ui.drawerOpen);
+    return;
+  }
   switch (action) {
     case 'layer':
       ui.layer = arg;
@@ -185,6 +197,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Backspace' && ui.screen === 'tile' && !(el instanceof HTMLInputElement)) {
     ui.screen = 'map';
     draw();
+    return;
+  }
+  if (e.key === 'Escape' && ui.drawerOpen && !ui.showBriefing && !ui.showOutcome) {
+    setDrawer(false);
     return;
   }
   if (e.key === 'Escape' && (ui.showBriefing || ui.showOutcome)) {

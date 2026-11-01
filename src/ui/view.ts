@@ -1,6 +1,6 @@
 // Investigation view (design doc section 5). Renders game state to HTML strings;
 // main.ts owns the UI state and wires the data-action attributes to handlers.
-import { calendar, fmt, fmtMoney, fmtRange, fmtUnit } from '../sim/format';
+import { calendar, fmt, fmtMoney, fmtRange, fmtUnit, withUnit } from '../sim/format';
 import type { FactorStatus, Game } from '../sim/game';
 import type { Known } from '../sim/knowledge';
 import type { NormalLink } from '../sim/loader';
@@ -18,6 +18,8 @@ export interface UiState {
   overlay: string;
   /** Pond tiles selected on the map; tile-scoped interventions act on all of them. */
   selection: string[];
+  /** The mission drawer (objective, weather and inflow, field log) under the top bar. */
+  drawerOpen: boolean;
   speed: 0 | 1 | 4;
   showBriefing: boolean;
   showOutcome: boolean;
@@ -82,10 +84,8 @@ export function renderTile(game: Game, ui: UiState): string {
       ${interventionsPanel(game, [ui.tileId])}
     </section>
     <aside class="right" aria-label="Analysis">
-      ${objectivePanel(game)}
       ${selectedPanel(game, ui)}
       ${limitsPanel(game, ui)}
-      ${logPanel(game)}
     </aside>
   </main>
   ${modals(game, ui)}`;
@@ -142,7 +142,42 @@ export function header(game: Game, ui: UiState): string {
     <div class="stat"><div class="k">Budget</div><div class="v mono">${fmtMoney(game.budget)}</div></div>
     <div class="sep"></div>
     <div class="stat"><div class="k">Samples taken</div><div class="v mono">${game.samplesTaken}</div></div>
+    ${missionDrawer(game, ui)}
   </header>`;
+}
+
+/**
+ * The objective, weather and inflow, and field log live in a drawer that slides down from
+ * under the top bar. Its tab peeks out below the bar and summarises the objective.
+ */
+function missionDrawer(game: Game, ui: UiState): string {
+  const o = game.mission.objective;
+  const v = game.data.variables.get(o.variable)!;
+  const k = game.knownMean(o.variable);
+  const kt = knownText(v, k);
+  const left = Math.max(0, game.deadlineDay - game.day);
+  const now = kt.unknown ? '?' : kt.est ? withUnit(v, kt.text) : kt.text;
+  const status = game.outcome ? (game.outcome.success ? 'objective met' : 'deadline passed') : `${left} days left`;
+  const chevron = `<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M2.5 4.5 6 8l3.5-3.5"/></svg>`;
+  return `<div class="drawer-wrap ${ui.drawerOpen ? 'open' : ''}">
+    <div class="drawer" id="mission-drawer" role="region" aria-label="Mission objective, weather and inflow, field log">
+      <div class="drawer-inner">
+        <div class="drawer-grid">
+          ${objectivePanel(game)}
+          ${boundaryPanel(game)}
+          ${logPanel(game, 12) || '<div class="box log"><div class="label">Field log</div><p class="muted small">Nothing yet. Samples and interventions are recorded here.</p></div>'}
+        </div>
+      </div>
+    </div>
+    <button type="button" class="drawer-tab" data-action="drawer" aria-expanded="${ui.drawerOpen}" aria-controls="mission-drawer">
+      <span class="dt-label">Mission</span>
+      <span class="dt-sep" aria-hidden="true"></span>
+      <span>${esc(v.name)} <span class="mono">${esc(now)}</span> of <span class="mono">${fmtUnit(v, o.target)}</span></span>
+      <span class="dt-sep" aria-hidden="true"></span>
+      <span>${status}</span>
+      <span class="dt-chev">${chevron}</span>
+    </button>
+  </div>`;
 }
 
 function chips(game: Game, ui: UiState): string {
@@ -288,7 +323,7 @@ export function objectivePanel(game: Game): string {
   return `<div class="box">
     <div class="label">Mission objective</div>
     <div class="otext">${esc(o.text)}</div>
-    <div class="orow"><span>Pond mean now</span><span class="mono">${esc(kt.est ? `${kt.text} ${v.unit}` : kt.text)}${kt.est ? ' <span class="est">EST</span>' : ''}</span></div>
+    <div class="orow"><span>Pond mean now</span><span class="mono">${esc(kt.est ? withUnit(v, kt.text) : kt.text)}${kt.est ? ' <span class="est">EST</span>' : ''}</span></div>
     ${gauge(v, k, 'full')}
     <div class="orow"><span>Target</span><span class="mono">${fmtUnit(v, o.target)}</span></div>
     <div class="progress" role="progressbar" aria-label="Time elapsed" aria-valuenow="${pct.toFixed(0)}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct.toFixed(1)}%"></span></div>
@@ -313,7 +348,7 @@ function selectedPanel(game: Game, ui: UiState): string {
   const zone = game.data.zones.find((z) => z.id === v.zone)!;
   const k = game.known(ui.tileId, v.id);
   const kt = knownText(v, k);
-  const valueText = kt.unknown ? '?' : kt.est ? `${kt.text} ${v.unit}` : kt.text;
+  const valueText = kt.unknown ? '?' : kt.est ? withUnit(v, kt.text) : kt.text;
 
   const list = (dir: 'in' | 'out') => {
     const { items, hidden, total } = linkItems(game, ui, v, dir);
@@ -376,8 +411,8 @@ function limitsPanel(game: Game, ui: UiState): string {
   </div>`;
 }
 
-export function logPanel(game: Game): string {
-  const entries = game.log.slice(-6).reverse();
+export function logPanel(game: Game, count = 6): string {
+  const entries = game.log.slice(-count).reverse();
   if (!entries.length) return '';
   return `<div class="box log">
     <div class="label">Field log</div>
@@ -478,4 +513,34 @@ function outcomeModal(game: Game): string {
     <p class="muted">You can keep running the pond to see what would have worked, but the mission is scored.</p>
     <button type="button" class="btn primary" data-action="outcome-close">Keep exploring</button>
   </div></div>`;
+}
+
+export function barrierState(game: Game): 'none' | 'building' | 'built' {
+  if (game.sim.activeInterventions().includes('carp_barrier')) return 'building';
+  return game.timesDone('carp_barrier') > 0 ? 'built' : 'none';
+}
+
+/** Weather and inflow: the boundary conditions set outside the pond. */
+function boundaryPanel(game: Game): string {
+  const g = game.sim.grid;
+  const inletTile = g.map.inlets[0].tile;
+  const row = (id: string) => {
+    const v = game.data.variables.get(id)!;
+    const kt = knownText(v, game.known(inletTile, id));
+    const val = kt.unknown ? '? not measured' : kt.text;
+    return `<button type="button" class="brow" data-action="inspect-boundary:${id}"><span>${esc(v.name)}</span><span class="mono">${esc(val)}</span>${gauge(v, game.known(inletTile, id))}</button>`;
+  };
+  const watershed = game.data.boundaryConditions.get(game.mission.boundary_conditions)!;
+  const ids = Object.keys(watershed.values).filter((id) => game.data.variables.get(id)!.zone !== 'air');
+  const climate = Object.keys(watershed.values).filter((id) => game.data.variables.get(id)!.zone === 'air');
+  const barrier = barrierState(game);
+  return `<div class="box">
+    <div class="label">Weather and inflow</div>
+    <div class="bsub">Boundary conditions: set outside the pond. You cannot change them in this mission.</div>
+    <div class="bsub strong">Weather</div>
+    ${climate.map(row).join('')}
+    <div class="bsub strong">Inflow from the ${esc(g.map.inlets.map((i) => i.name).join(', '))}</div>
+    ${ids.map(row).join('')}
+    ${barrier !== 'none' ? `<div class="bnote">Carp barrier ${barrier === 'building' ? 'being built' : 'in place'}: blocks most adult carp coming from upstream.</div>` : ''}
+  </div>`;
 }

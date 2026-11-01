@@ -161,15 +161,13 @@
     "unit": "kg/ha",
     "kind": "stock",
     "update_interval_days": 1,
-    "observable": "coarse",
+    "observable": "none",
     "initial_knowledge": "unknown",
     "display_decimals": 0,
     "scale": { "min": 0, "max": 800, "reference": {"value": 100, "label": "plant loss above"} },
     "min": 0,
     "pin": { "x": 0.4, "y": 0.8 },
-    "description": "Bottom-feeding fish that root through sediment for food, uprooting plants and stirring up mud.",
-    "coarse_bins": [0, 40, 150, 1000],
-    "observe_source": "Wakes and mud plumes seen from the bank"
+    "description": "Bottom-feeding fish that root through sediment for food, uprooting plants and stirring up mud."
   },
   {
     "id": "plant_cover",

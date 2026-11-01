@@ -1,12 +1,12 @@
 // Map screen: the 3D map (map3d/MapScene) plus the panels around it. The scene is created
 // once and moved into place on each render; this module builds what it is allowed to show.
-import { fmt, fmtUnit } from '../sim/format';
+import { fmt, fmtUnit, withUnit } from '../sim/format';
 import type { FactorStatus, Game } from '../sim/game';
 import { OFF_MAP } from '../sim/grid';
 import { bounds, type Known } from '../sim/knowledge';
 import { gauge } from './gauge';
 import type { MapViewState, TileView } from './map3d/MapScene';
-import { esc, header, interventionsPanel, knownText, logPanel, modals, objectivePanel, type UiState } from './view';
+import { barrierState, esc, header, interventionsPanel, knownText, modals, type UiState } from './view';
 
 /** Variables offered as map overlays, in display order. */
 const OVERLAYS = ['water_depth', 'secchi', 'light_bed', 'plant_cover', 'suspended_sediment', 'chla', 'total_p', 'bottom_do', 'carp', 'legacy_p'];
@@ -43,10 +43,7 @@ export function renderMap(game: Game, ui: UiState): string {
       ${interventionsPanel(game, ui.selection, ui.selection.length > 1 ? `${ui.selection.length} selected tiles` : undefined)}
     </section>
     <aside class="right" aria-label="Pond overview">
-      ${objectivePanel(game)}
       ${tilePanel(game, ui)}
-      ${boundaryPanel(game)}
-      ${logPanel(game)}
     </aside>
   </main>
   ${modals(game, ui)}`;
@@ -72,10 +69,6 @@ function overlayScale(game: Game, variableId: string) {
   return { lo, hi, t: (x: number) => 0.15 + 0.85 * ((x - lo) / (hi - lo)) };
 }
 
-export function barrierState(game: Game): 'none' | 'building' | 'built' {
-  if (game.sim.activeInterventions().includes('carp_barrier')) return 'building';
-  return game.timesDone('carp_barrier') > 0 ? 'built' : 'none';
-}
 
 /** Everything the 3D scene may draw: observable state and knowledge only. */
 export function mapViewState(game: Game, ui: UiState): MapViewState {
@@ -93,14 +86,12 @@ export function mapViewState(game: Game, ui: UiState): MapViewState {
       const runoff = g.runoffTo[t.index];
       const drains = runoff === null ? '' : runoff === OFF_MAP ? ' · runoff pools here' : ` · runoff drains to ${g.tiles[runoff].id}`;
       const info = t.body ? `${bodyName.get(t.body)} · scenery in this mission` : `${above.toFixed(2)} m above the pond surface${drains}`;
-      return { id: t.id, row: t.row, col: t.col, water: false, turbidity: null, cover: 0, carpLevel: 0, carpMeasured: null, overlay: null, title: `Tile ${t.id} · ${t.description}`, info };
+      return { id: t.id, row: t.row, col: t.col, water: false, turbidity: null, cover: 0, carpMeasured: null, overlay: null, title: `Tile ${t.id} · ${t.description}`, info };
     }
     const secchi = mid(game.known(t.id, 'secchi'));
     const turbidity = secchi === null ? 0.6 : Math.min(1, Math.max(0, (1.6 - secchi) / 1.4)) * 0.9 + 0.05;
     const cover = (mid(game.known(t.id, 'plant_cover')) ?? 0) / 100;
     const carpK = game.known(t.id, 'carp');
-    const carpMid = mid(carpK);
-    const carpLevel = carpMid === null ? 0 : carpMid < 40 ? 0 : carpMid < 150 ? 1 : carpMid < 400 ? 2 : 3;
     let overlay: TileView['overlay'] = null;
     let overlayText = '';
     if (overlayVar && scale) {
@@ -108,7 +99,7 @@ export function mapViewState(game: Game, ui: UiState): MapViewState {
       const b = bounds(k);
       overlay = b ? { color: ramp(layerColor, scale.t((b.lo + b.hi) / 2)), state: k.state as 'estimate' | 'measured' } : { color: '#D5DCDA', state: 'unknown' };
       const kt = knownText(overlayVar, k);
-      overlayText = ` · ${overlayVar.name}: ${kt.unknown ? 'not known' : kt.est ? `${kt.text} ${overlayVar.unit} (estimate)` : kt.text}`;
+      overlayText = ` · ${overlayVar.name}: ${kt.unknown ? 'not known' : kt.est ? `${withUnit(overlayVar, kt.text)} (estimate)` : kt.text}`;
     }
     const depth = game.known(t.id, 'water_depth');
     const depthText = depth.state === 'measured' ? `water depth ${fmtUnit(game.data.variables.get('water_depth')!, depth.value)} (gauge)` : '';
@@ -119,7 +110,6 @@ export function mapViewState(game: Game, ui: UiState): MapViewState {
       water: true,
       turbidity,
       cover,
-      carpLevel,
       carpMeasured: carpK.state === 'measured' ? carpK.value : null,
       overlay,
       title: `Tile ${t.id} · ${t.description}`,
@@ -145,7 +135,7 @@ export function mapViewState(game: Game, ui: UiState): MapViewState {
 
 function legend(game: Game, ui: UiState): string {
   if (ui.overlay === 'surface') {
-    return `<div class="legend"><span>Surface view: water colour from visible clarity, green fronds for visible plants. Bow wakes and trails of mud hint at carp feeding below the surface; the fish themselves appear once surveyed.</span></div>`;
+    return `<div class="legend"><span>Surface view: water colour from visible clarity, green fronds for visible plants. Fish appear once surveyed.</span></div>`;
   }
   if (ui.overlay === 'flow') {
     return `<div class="legend"><span><span class="swatch" style="background:#1f5f8e"></span> water flowing through the pond (longer arrows carry more)</span><span><span class="swatch" style="background:#8a5a2b"></span> where rain runs off the land; × marks a hollow</span></div>`;
@@ -189,7 +179,7 @@ function tilePanel(game: Game, ui: UiState): string {
       const v = game.data.variables.get(id)!;
       const k = game.known(t.id, id);
       const kt = knownText(v, k);
-      const val = kt.unknown ? '?' : kt.est ? `${kt.text} ${v.unit}` : kt.text;
+      const val = kt.unknown ? '?' : kt.est ? withUnit(v, kt.text) : kt.text;
       return `<div class="orow gauged"><span>${esc(v.name)}</span><span class="mono">${esc(val)}${kt.est ? ' <span class="est">EST</span>' : ''}</span>${gauge(v, k)}</div>`;
     })
     .join('');
@@ -211,25 +201,3 @@ function tilePanel(game: Game, ui: UiState): string {
   </div>`;
 }
 
-function boundaryPanel(game: Game): string {
-  const g = game.sim.grid;
-  const inletTile = g.map.inlets[0].tile;
-  const row = (id: string) => {
-    const v = game.data.variables.get(id)!;
-    const kt = knownText(v, game.known(inletTile, id));
-    const val = kt.unknown ? '? not measured' : kt.text;
-    return `<button type="button" class="brow" data-action="inspect-boundary:${id}"><span>${esc(v.name)}</span><span class="mono">${esc(val)}</span>${gauge(v, game.known(inletTile, id))}</button>`;
-  };
-  const watershed = game.data.boundaryConditions.get(game.mission.boundary_conditions)!;
-  const ids = Object.keys(watershed.values).filter((id) => game.data.variables.get(id)!.zone !== 'air');
-  const climate = Object.keys(watershed.values).filter((id) => game.data.variables.get(id)!.zone === 'air');
-  const barrier = barrierState(game);
-  return `<div class="box">
-    <div class="label">Boundary conditions</div>
-    <div class="bsub">Climate forcings. Not under your control.</div>
-    ${climate.map(row).join('')}
-    <div class="bsub">Watershed inputs at the ${esc(g.map.inlets.map((i) => i.name).join(', '))}. Fixed in this mission.</div>
-    ${ids.map(row).join('')}
-    ${barrier !== 'none' ? `<div class="bnote">Carp barrier ${barrier === 'building' ? 'being built' : 'in place'}: blocks most adult carp coming from upstream.</div>` : ''}
-  </div>`;
-}
