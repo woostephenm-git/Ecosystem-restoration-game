@@ -68,6 +68,14 @@ export interface Availability {
   reason?: string;
 }
 
+/**
+ * How strongly a link must respond for its input to count as limiting in a funding application:
+ * an elasticity of 0.1, so a 10% change in the input moves the output by at least 1% on some
+ * pond tile. In Mission 1 the genuine links sit at 0.18 or more; nitrate feeding algae, which is
+ * saturated, stays near 0.06 whatever the player does.
+ */
+const LIMITING_RESPONSE = 0.1;
+
 // Spin-up brings the degraded pond to its own equilibrium before the mission clock starts.
 // It does not depend on the player's seed, so it runs once per mission and is reused.
 const SPINUP_SEED = 0;
@@ -102,7 +110,7 @@ export class Game {
   samplesTaken = 0;
   outcome: Outcome | null = null;
   readonly applications: FundingApplication[] = [];
-  private activeLinkCache = new Map<string, boolean>();
+  private responseCache = new Map<string, number>();
   /** True pond-wide means when the mission clock started, for before-and-after comparison. */
   readonly startSurvey: Record<string, number>;
 
@@ -330,18 +338,30 @@ export class Game {
   }
 
   /**
-   * Does the simulation carry an effect from `a` to `b` on this map? True if a chain of links
-   * runs from one to the other, passing only through derived variables (Secchi depth, light at
-   * the bed), and every link in it has some effect on at least one pond tile today.
+   * Does `a` limit `b` in this pond? True if a chain of links runs from one to the other,
+   * passing only through derived variables (Secchi depth, light at the bed), and every link
+   * in it responds to its input on at least one pond tile today: a 10% change in the input
+   * moves the output by at least 1% (see LIMITING_RESPONSE). A link that exists but is
+   * saturated, like nitrate feeding algae when nitrate is plentiful, does not count.
    */
   supportsArrow(a: string, b: string): boolean {
-    if (a === b) return false;
+    return this.arrowSupport(a, b) === 'limits';
+  }
+
+  /** 'limits', 'saturated' (linked, but changing `a` would make little difference), or 'none'. */
+  arrowSupport(a: string, b: string): 'limits' | 'saturated' | 'none' {
+    if (a === b) return 'none';
+    if (this.reaches(a, b, LIMITING_RESPONSE)) return 'limits';
+    return this.reaches(a, b, 0) ? 'saturated' : 'none';
+  }
+
+  private reaches(a: string, b: string, minResponse: number): boolean {
     const seen = new Set([a]);
     const queue = [a];
     while (queue.length) {
       const x = queue.shift()!;
       for (const l of this.data.links) {
-        if (l.to === x || !l.from.includes(x) || !this.linkActive(l, x)) continue;
+        if (l.to === x || !l.from.includes(x) || this.linkResponse(l, x) <= minResponse) continue;
         if (l.to === b) return true;
         if (this.data.variables.get(l.to)!.kind === 'derived' && !seen.has(l.to)) {
           seen.add(l.to);
@@ -352,14 +372,36 @@ export class Game {
     return false;
   }
 
-  private linkActive(link: NormalLink, sourceId: string): boolean {
+  /**
+   * How strongly a link responds to one of its inputs: the largest elasticity over pond tiles
+   * today (relative change in the link's output, or in a derived target's value, per relative
+   * change in the input). 1 for a proportional link, near 0 for a saturated one.
+   */
+  private linkResponse(link: NormalLink, sourceId: string): number {
     const key = `${link.id}|${sourceId}|${this.day}`;
-    let on = this.activeLinkCache.get(key);
-    if (on === undefined) {
-      on = this.waterTileIds().some((id) => this.linkDirection(id, link, sourceId) !== 0);
-      this.activeLinkCache.set(key, on);
+    let r = this.responseCache.get(key);
+    if (r === undefined) {
+      r = Math.max(0, ...this.waterTileIds().map((id) => this.elasticity(id, link, sourceId)));
+      this.responseCache.set(key, r);
     }
-    return on;
+    return r;
+  }
+
+  private elasticity(tileId: string, link: NormalLink, sourceId: string): number {
+    const sim = this.sim;
+    const base = sim.lookup(this.tile(tileId));
+    const x = base(sourceId);
+    if (Math.abs(x) < 1e-9) return 0;
+    const step = 0.05;
+    const up = (id: string) => (id === sourceId ? x * (1 + step) : base(id));
+    const before = evalLink(link, base);
+    const delta = evalLink(link, up) - before;
+    const target = this.data.variables.get(link.to)!;
+    if (target.kind !== 'derived') return Math.abs(before) < 1e-12 ? 0 : Math.abs(delta / before) / step;
+    const sum = target.derived!.base + sim.linkTerms(this.tile(tileId), target.id).reduce((s, t) => s + t.value, 0);
+    const t0 = applyTransform(target.derived!.transform, sum);
+    const t1 = applyTransform(target.derived!.transform, sum + delta);
+    return Math.abs(t0) < 1e-12 ? 0 : Math.abs((t1 - t0) / t0) / step;
   }
 
   /**
@@ -377,11 +419,16 @@ export class Game {
     const problems: string[] = [];
     const ok = new Set<string>();
     const supported = list.map(([a, b]) => {
-      if (a !== f.target && this.supportsArrow(a, b)) {
+      const support = a === f.target ? 'none' : this.arrowSupport(a, b);
+      if (support === 'limits') {
         ok.add(`${a}>${b}`);
         return true;
       }
-      problems.push(`The reviewers found no evidence that ${name(a)} drives ${name(b)} in this pond.`);
+      problems.push(
+        support === 'saturated'
+          ? `${name(a).replace(/^./, (c) => c.toUpperCase())} does affect ${name(b)}, but there is so much of it in this pond that changing it would make little difference. It is not what limits ${name(b)} here.`
+          : `The reviewers found no evidence that ${name(a)} drives ${name(b)} in this pond.`,
+      );
       return false;
     });
     const funded = new Set(this.applications.filter((x) => x.success && x.chain).map((x) => x.chain!.join('>')));

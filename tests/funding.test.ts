@@ -26,7 +26,6 @@ describe('funding applications', () => {
     for (const chain of [
       ['carp', 'suspended_sediment'],
       ['total_p', 'chla'],
-      ['nitrate', 'chla'],
     ]) {
       const g = sampled();
       const b0 = g.budget;
@@ -79,7 +78,31 @@ describe('funding applications', () => {
     for (const id of ['secchi', 'light_bed', 'bottom_do']) expect(nodes).not.toContain(id);
     const chains: string[] = [];
     for (const x of nodes) for (const y of nodes) if (x !== y && g.supportsArrow(x, target) && g.supportsArrow(y, x)) chains.push(`${y} > ${x}`);
-    expect(chains.sort()).toEqual(['carp > suspended_sediment', 'nitrate > chla', 'total_p > chla']);
+    expect(chains.sort()).toEqual(['carp > suspended_sediment', 'total_p > chla']);
+  });
+
+  it('does not count a saturated link: nitrate is too plentiful to limit the algae', () => {
+    const g = sampled();
+    expect(g.arrowSupport('nitrate', 'chla')).toBe('saturated');
+    expect(g.arrowSupport('total_p', 'chla')).toBe('limits');
+    const app = g.applyForFunding([
+      ['chla', 'plant_cover'],
+      ['nitrate', 'chla'],
+    ])!;
+    expect(app.success).toBe(false);
+    expect(app.supported).toEqual([true, false]);
+    expect(app.problems[0]).toMatch(/Nitrate does affect phytoplankton chl-a, but there is so much of it/);
+  });
+
+  it('nitrate stays non-limiting after restoration too', () => {
+    const g = sampled();
+    g.intervene('carp_removal', 'G7');
+    g.intervene('carp_barrier', 'G7');
+    g.advance(40);
+    for (const t of ['D7', 'E8', 'G9', 'H9', 'J7', 'K8']) g.intervene('plant_submerged', t);
+    g.advance(400);
+    expect(g.arrowSupport('nitrate', 'chla')).toBe('saturated');
+    expect(g.supportsArrow('total_p', 'chla')).toBe(true);
   });
 
   it('ignores arrows to or from variables that are not on the board', () => {
