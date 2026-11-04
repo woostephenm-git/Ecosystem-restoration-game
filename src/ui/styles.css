@@ -1962,6 +1962,11 @@ button:focus-visible {
     transform: translateX(var(--wl));
   }
 }
+@keyframes xs-flow {
+  to {
+    transform: translateX(var(--fw));
+  }
+}
 @keyframes xs-drift {
   to {
     transform: translate(var(--sx), var(--sy));

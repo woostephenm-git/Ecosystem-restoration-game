@@ -11,11 +11,18 @@ export interface Profile {
   right: string;
   /** Whether the shallow end is on the left. */
   shallowLeft: boolean;
+  /** Unit vector from the left end to the right in map coordinates (x east, z south). */
+  along: { x: number; z: number };
 }
 
 interface Pt {
   x: number;
   z: number;
+}
+
+function unit(a: Pt, b: Pt): { x: number; z: number } {
+  const len = Math.hypot(b.x - a.x, b.z - a.z) || 1;
+  return { x: (b.x - a.x) / len, z: (b.z - a.z) / len };
 }
 
 const COMPASS = ['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'];
@@ -80,7 +87,7 @@ function fromTerrain(t: Terrain, tile: { row: number; col: number }, rise: numbe
     const f = k / (n - 1);
     return surface - heightAt(t, a.x + (b.x - a.x) * f, a.z + (b.z - a.z) * f);
   });
-  return { depths, left: compass(a.x - b.x, a.z - b.z), right: compass(b.x - a.x, b.z - a.z), shallowLeft };
+  return { depths, left: compass(a.x - b.x, a.z - b.z), right: compass(b.x - a.x, b.z - a.z), shallowLeft, along: unit(a, b) };
 }
 
 /**
@@ -112,5 +119,5 @@ function fromNeighbours(game: Game, tileId: string, rise: number, n: number): Pr
     const h = f < 0.5 ? a.h + (here - a.h) * (f / 0.5) : here + (b.h - here) * ((f - 0.5) / 0.5);
     return surface - h;
   });
-  return { depths, left: compass(a.x - b.x, a.z - b.z), right: compass(b.x - a.x, b.z - a.z), shallowLeft };
+  return { depths, left: compass(a.x - b.x, a.z - b.z), right: compass(b.x - a.x, b.z - a.z), shallowLeft, along: unit(a, b) };
 }

@@ -40,6 +40,31 @@ function loop(name: string, seconds: number, offset: number, extra = ''): string
   return `animation:${name} ${seconds.toFixed(2)}s ${extra} infinite;animation-delay:${delay.toFixed(2)}s;`;
 }
 
+/** Particle drift (drawing px per second) on the fastest-flowing tile in the pond. */
+const MAX_DRIFT = 26;
+
+/**
+ * How fast particles drift through this tile, from -1 to 1; positive is left to right. The
+ * flow solver gives each tile's share of the inflow and its direction (the map's water-flow
+ * view); dividing by depth turns that into a speed, since the same water moves faster through
+ * shallows. A side view can only show sideways motion, so particles move at the tile's full
+ * speed, towards whichever end of the cut is closer to downstream. The square root keeps slow
+ * tiles visibly drifting while preserving the order of speeds.
+ */
+function flowAlongCut(game: Game, tileId: string, along: { x: number; z: number }): number {
+  const g = game.sim.grid;
+  const speed = (i: number) => {
+    const v = g.flowVector[i];
+    return Math.hypot(v.x, v.z) / Math.max(0.3, game.sim.tiles[i].values.water_depth ?? 0);
+  };
+  const fastest = Math.max(0, ...g.waterTiles().map((t) => speed(t.index)));
+  if (fastest <= 0) return 0;
+  const i = g.indexOf(tileId);
+  const v = g.flowVector[i];
+  const sign = v.x * along.x + v.z * along.z < 0 ? -1 : 1;
+  return sign * Math.sqrt(speed(i) / fastest);
+}
+
 function mid(game: Game, tileId: string, id: string): number | null {
   const b = bounds(game.known(tileId, id));
   return b ? (b.lo + b.hi) / 2 : null;
@@ -109,8 +134,11 @@ export function drawTile(game: Game, tileId: string, zoneOrder: string[], select
   parts.push(`<clipPath id="xs-water"><polygon points="0,${waterY - 2 * amp} ${W},${waterY - 2 * amp} ${bedLine.join(' ')}"/></clipPath>`);
 
   // Suspended particles: drawn only as a visual impression of murk, scaled by visible clarity.
-  // Each one wanders slowly in the water.
+  // Each one wanders slowly, and the lot are carried along the cut by the water flowing
+  // through this tile. A copy one drawing-width upstream refills the side they leave.
   const specks = Math.round((1 - clarity) * 34);
+  const drift = flowAlongCut(game, tileId, prof.along) * MAX_DRIFT;
+  const carried = Math.abs(drift) >= 0.6;
   const speckParts: string[] = [];
   for (let i = 0; i < specks; i++) {
     const x = 8 + jitter(i) * (W - 16);
@@ -119,9 +147,12 @@ export function drawTile(game: Game, tileId: string, zoneOrder: string[], select
     const sx = ((jitter(i + 1000) - 0.5) * 22).toFixed(1);
     const sy = ((jitter(i + 1100) - 0.5) * 14).toFixed(1);
     const style = `${loop('xs-drift', 5 + jitter(i + 1200) * 6, jitter(i + 1300) * 10, 'ease-in-out alternate')}--sx:${sx}px;--sy:${sy}px`;
-    speckParts.push(`<circle class="anim" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${(1 + jitter(i + 200) * 1.2).toFixed(1)}" style="${style}"/>`);
+    const r = (1 + jitter(i + 200) * 1.2).toFixed(1);
+    for (const cx of carried ? [x, x - Math.sign(drift) * W] : [x])
+      speckParts.push(`<circle class="anim" cx="${cx.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" style="${style}"/>`);
   }
-  parts.push(`<g fill="#A08C62" opacity="0.5" clip-path="url(#xs-water)">${speckParts.join('')}</g>`);
+  const flow = carried ? ` class="anim" style="${loop('xs-flow', W / Math.abs(drift), 0, 'linear')}--fw:${(Math.sign(drift) * W).toFixed(0)}px"` : '';
+  parts.push(`<g fill="#A08C62" opacity="0.5" clip-path="url(#xs-water)"><g${flow}>${speckParts.join('')}</g></g>`);
 
   // Rings spreading on the surface now and then.
   const rings: string[] = [];
