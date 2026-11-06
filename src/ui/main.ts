@@ -270,9 +270,10 @@ root.addEventListener('change', (e) => {
     const k = db.slots.indexOf(arg);
     if (k >= 0) db.slots[k] = null;
     else {
-      // A new variable takes the first free slot; the others keep their colours.
+      // A new variable takes the first free slot (or a new one); the others keep their colours.
       const free = db.slots.indexOf(null);
       if (free >= 0) db.slots[free] = arg;
+      else db.slots.push(arg);
     }
   }
   draw();

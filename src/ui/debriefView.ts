@@ -7,11 +7,23 @@ import { scalePos } from './gauge';
 import { esc, header, modals, type UiState } from './view';
 
 /**
- * Categorical slots 1 to 4 of the reference palette (validated together on a light surface).
- * A variable keeps its slot while selected, so removing one never repaints the others.
+ * The eight categorical slots of the reference palette, in their validated order for lines.
+ * There is no ninth hue: slots 9 to 16 reuse the eight with a dashed line, so identity never
+ * rests on colour alone. A variable keeps its slot while selected, so adding or removing one
+ * never repaints the others.
  */
-export const SERIES_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100'];
-export const MAX_SERIES = SERIES_COLORS.length;
+export const SERIES_COLORS = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+const DASH = '6 4';
+
+function slotStyle(k: number): { color: string; dashed: boolean } {
+  return { color: SERIES_COLORS[k % SERIES_COLORS.length], dashed: k >= SERIES_COLORS.length };
+}
+
+/** A short line sample in the series' colour, dashed when the line is. */
+function swatch(s: { color: string; dashed: boolean }): string {
+  const bg = s.dashed ? `repeating-linear-gradient(90deg, ${s.color} 0 4px, transparent 4px 7px)` : s.color;
+  return `<span class="db-swatch" style="background:${bg}"></span>`;
+}
 
 const W = 1000;
 const H = 430;
@@ -22,6 +34,7 @@ const PH = H - M.t - M.b;
 interface Series {
   v: Variable;
   color: string;
+  dashed: boolean;
   values: number[];
 }
 
@@ -44,7 +57,7 @@ export function renderDebrief(game: Game, ui: UiState): string {
   const db = ui.debrief;
   const vars = new Map(debriefVariables(game).map((v) => [v.id, v]));
   const series: Series[] = db.slots
-    .map((id, k) => (id && vars.has(id) ? { v: vars.get(id)!, color: SERIES_COLORS[k], values: game.historySeries(id, db.tile) } : null))
+    .map((id, k) => (id && vars.has(id) ? { v: vars.get(id)!, ...slotStyle(k), values: game.historySeries(id, db.tile) } : null))
     .filter((s): s is Series => !!s);
   const days = game.history.days;
   const events = game.debriefEvents();
@@ -76,7 +89,7 @@ function summary(game: Game): string {
     <h1>Debrief</h1>
     <p>${status}</p>
     <p class="muted small">These are the true values from the simulation, not your measurements.</p>
-    ${o && !o.success ? '<div class="modal-actions db-retry"><button type="button" class="btn primary" data-action="retry">Retry the mission</button></div>' : ''}
+    ${o ? `<div class="modal-actions db-retry"><button type="button" class="btn ${o.success ? '' : 'primary'}" data-action="retry">${o.success ? 'Play the mission again' : 'Retry the mission'}</button></div>` : ''}
   </section>`;
 }
 
@@ -91,16 +104,15 @@ function filters(game: Game, ui: UiState, vars: Map<string, Variable>): string {
     .map((v) => {
       const slot = db.slots.indexOf(v.id);
       const on = slot >= 0;
-      const full = !on && chosen >= MAX_SERIES;
-      return `<label class="db-var ${on ? 'on' : ''} ${full ? 'off' : ''}">
-        <input type="checkbox" data-change="db-var:${v.id}" ${on ? 'checked' : ''} ${full ? 'disabled' : ''}>
-        ${on ? `<span class="db-swatch" style="background:${SERIES_COLORS[slot]}"></span>` : ''}${esc(v.name)}
+      return `<label class="db-var ${on ? 'on' : ''}">
+        <input type="checkbox" data-change="db-var:${v.id}" ${on ? 'checked' : ''}>
+        ${on ? swatch(slotStyle(slot)) : ''}${esc(v.name)}
       </label>`;
     })
     .join('');
   return `<section class="db-filters" aria-label="Chart filters">
     <label class="db-tile"><span class="label">Tile</span><select data-change="db-tile">${options}</select></label>
-    <fieldset class="db-vars"><legend class="label">Variables <span class="muted">(${chosen} of ${MAX_SERIES})</span></legend>${boxes}</fieldset>
+    <fieldset class="db-vars"><legend class="label">Variables <span class="muted">(${chosen} selected)</span></legend>${boxes}</fieldset>
   </section>`;
 }
 
@@ -155,7 +167,7 @@ function svg(game: Game, series: Series[], events: DebriefEvent[]): string {
       d += `${pen ? 'L' : 'M'}${xOf(c.days[i]).toFixed(1)} ${yOf(s.v, val).toFixed(1)}`;
       pen = true;
     });
-    parts.push(`<path class="line" d="${d}" stroke="${s.color}"/>`);
+    parts.push(`<path class="line" d="${d}" stroke="${s.color}"${s.dashed ? ` stroke-dasharray="${DASH}"` : ''}/>`);
   }
 
   // Direct labels at the line ends, nudged apart so they never collide.
@@ -167,12 +179,14 @@ function svg(game: Game, series: Series[], events: DebriefEvent[]): string {
     })
     .filter((e): e is { s: Series; val: number; y: number } => !!e)
     .sort((a, b) => a.y - b.y);
-  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + 30);
-  const overflow = ends.length ? ends[ends.length - 1].y - (M.t + PH) : 0;
-  if (overflow > 0) ends.forEach((e) => (e.y -= overflow));
+  // Spaced 30 px apart, closer when many lines share the chart, so they always fit its height.
+  const gap = Math.min(30, PH / Math.max(1, ends.length));
+  for (let i = 1; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, ends[i - 1].y + gap);
+  // Then back up from the bottom edge, moving only the labels that are crowded.
+  for (let i = ends.length - 1; i >= 0; i--) ends[i].y = Math.min(ends[i].y, i === ends.length - 1 ? M.t + PH : ends[i + 1].y - gap);
   const xEnd = xOf(c.days[c.days.length - 1] ?? c.d0);
   for (const e of ends) {
-    parts.push(`<line x1="${xEnd + 6}" x2="${xEnd + 18}" y1="${e.y}" y2="${e.y}" stroke="${e.s.color}" stroke-width="2"/>`);
+    parts.push(`<line x1="${xEnd + 6}" x2="${xEnd + 18}" y1="${e.y}" y2="${e.y}" stroke="${e.s.color}" stroke-width="2"${e.s.dashed ? ' stroke-dasharray="4 2"' : ''}/>`);
     parts.push(`<text class="end" x="${xEnd + 22}" y="${e.y - 2}">${esc(e.s.v.name)}</text><text class="endval" x="${xEnd + 22}" y="${e.y + 12}">${esc(fmtUnit(e.s.v, e.val))}</text>`);
   }
 
@@ -190,7 +204,7 @@ function svg(game: Game, series: Series[], events: DebriefEvent[]): string {
 function legend(series: Series[]): string {
   if (series.length < 2) return '';
   return `<ul class="db-legend">${series
-    .map((s) => `<li><span class="db-swatch" style="background:${s.color}"></span>${esc(s.v.name)} <span class="muted">typical range ${esc(fmtUnit(s.v, s.v.scale.min))} to ${esc(fmtUnit(s.v, s.v.scale.max))}${s.v.scale.log ? ', log scale' : ''}</span></li>`)
+    .map((s) => `<li>${swatch(s)}${esc(s.v.name)} <span class="muted">typical range ${esc(fmtUnit(s.v, s.v.scale.min))} to ${esc(fmtUnit(s.v, s.v.scale.max))}${s.v.scale.log ? ', log scale' : ''}</span></li>`)
     .join('')}</ul>`;
 }
 
@@ -260,7 +274,7 @@ export function wireDebrief(root: HTMLElement, game: Game) {
     const d = c.days[i];
     const active = c.events.filter((ev) => d >= ev.day && d < ev.day + ev.duration).map((ev) => `${c.events.indexOf(ev) + 1}. ${ev.name} (day ${d - ev.day + 1} of ${ev.duration})`);
     tip.innerHTML = `<div class="tip-date mono">${esc(shortDate(game, d))}</div>${c.series
-      .map((s) => `<div class="tip-row"><span class="db-swatch" style="background:${s.color}"></span><span>${esc(s.v.name)}</span><span class="mono">${Number.isFinite(s.values[i]) ? esc(fmtUnit(s.v, s.values[i])) : 'not pond yet'}</span></div>`)
+      .map((s) => `<div class="tip-row">${swatch(s)}<span>${esc(s.v.name)}</span><span class="mono">${Number.isFinite(s.values[i]) ? esc(fmtUnit(s.v, s.values[i])) : 'not pond yet'}</span></div>`)
       .join('')}${active.length ? `<div class="tip-active">${active.map(esc).join('<br>')}</div>` : ''}`;
     tip.hidden = false;
     // Place the tooltip beside the crosshair, flipping sides near the right edge.

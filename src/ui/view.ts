@@ -160,7 +160,7 @@ function tilePicker(game: Game, ui: UiState): string {
 export function header(game: Game, ui: UiState): string {
   const cal = calendar(game.day, game.mission.start.day_of_year);
   const speedBtn = (speed: 0 | 1 | 4, label: string, ic: string) =>
-    `<button type="button" class="btn time ${ui.speed === speed ? 'on' : ''}" data-action="speed:${speed}" aria-pressed="${ui.speed === speed}">${ic}<span>${label}</span></button>`;
+    `<button type="button" class="btn time speed-${speed} ${ui.speed === speed ? 'on' : ''}" data-action="speed:${speed}" aria-pressed="${ui.speed === speed}">${ic}<span>${label}</span></button>`;
   const onMap = ui.screen === 'map';
   const onDebrief = ui.screen === 'debrief';
   const tile = game.sim.grid.tiles[game.sim.grid.indexOf(ui.tileId)];
@@ -572,6 +572,7 @@ function outcomeModal(game: Game): string {
         <div class="modal-actions">
           <button type="button" class="btn primary" data-action="debrief">Open the debrief</button>
           <button type="button" class="btn" data-action="outcome-close">Keep exploring the pond</button>
+          <button type="button" class="btn" data-action="retry">Play the mission again</button>
         </div>
       </div></div>`;
   }
