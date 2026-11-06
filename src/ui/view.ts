@@ -581,9 +581,10 @@ function outcomeModal(game: Game): string {
     <h1 id="out-title">The pond is still turbid</h1>
     <p>Final survey: <span class="mono">${fmt(v, o.value)}${v.unit}</span> ${esc(v.name.toLowerCase())} against a target of <span class="mono">${fmt(v, o.target)}${v.unit}</span>.</p>
     ${surveyTable(game)}
-    <p class="muted">You can keep running the pond to see what would have worked, but the mission is scored.</p>
+    <p class="muted">Try the mission again from the start, or keep running the pond to see what would have worked. This attempt is scored either way.</p>
     <div class="modal-actions">
-      <button type="button" class="btn primary" data-action="debrief">Open the debrief</button>
+      <button type="button" class="btn primary" data-action="retry">Retry the mission</button>
+      <button type="button" class="btn" data-action="debrief">Open the debrief</button>
       <button type="button" class="btn" data-action="outcome-close">Keep exploring</button>
     </div>
   </div></div>`;

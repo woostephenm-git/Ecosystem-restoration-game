@@ -2181,3 +2181,7 @@ button:focus-visible {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.db-retry {
+  margin-top: 10px;
+}

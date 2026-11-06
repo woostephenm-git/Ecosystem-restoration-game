@@ -243,6 +243,11 @@ root.addEventListener('click', (e) => {
       ui.funding = { open: false, factor: null, cause: null };
       break;
     }
+    case 'retry':
+      // A fresh start: reloading rebuilds the game, the map and every panel from scratch.
+      // A ?seed= in the address is kept, so a seeded attempt replays the same conditions.
+      location.reload();
+      return;
     case 'debrief':
       ui.showOutcome = false;
       ui.speed = 0;

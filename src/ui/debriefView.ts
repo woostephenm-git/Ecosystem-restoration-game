@@ -76,6 +76,7 @@ function summary(game: Game): string {
     <h1>Debrief</h1>
     <p>${status}</p>
     <p class="muted small">These are the true values from the simulation, not your measurements.</p>
+    ${o && !o.success ? '<div class="modal-actions db-retry"><button type="button" class="btn primary" data-action="retry">Retry the mission</button></div>' : ''}
   </section>`;
 }
 

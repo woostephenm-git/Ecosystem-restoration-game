@@ -64,7 +64,7 @@ scripts/              map generation, tuning and profiling helpers
 These were marked Open or Proposed in the design doc, or decided in review. Each is easy to change.
 
 - **Engine:** TypeScript + Vite in the browser, chosen over Godot 4. The sim core has no browser dependencies and could be ported.
-- **Failure state:** the objective is scored at the deadline from the true state, then the player can keep running the pond as a sandbox.
+- **Failure state:** the objective is scored at the deadline from the true state, then the player can keep running the pond as a sandbox. After a failure, "Retry the mission" (on the result pop-up and the debrief) starts again from the briefing; a `?seed=` in the address is kept, so a seeded attempt replays the same conditions.
 - **Objective:** mean submerged plant cover over all of the pond's tiles, target 30% by the end of year 3.
 - **Budget:** one shared $8,000 for sampling and interventions. The dev server overrides it with $100,000 for testing (`TESTING_BUDGET` in `src/ui/main.ts`).
 - **Grid scale:** 25 m tiles on a 12 × 12 grid.
