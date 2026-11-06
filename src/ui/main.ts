@@ -291,9 +291,13 @@ root.addEventListener(
 // Description box beside the compact action buttons. The hovered or focused button is
 // remembered so the box survives the re-render on every sim tick.
 let infoAction: string | null = null;
+/** The description box serving a button: one shared by a group of panels, or the panel's own. */
+function infoBoxFor(el: Element | null | undefined): HTMLElement | null {
+  const host = el?.closest('.actions-wrap') ?? el?.closest('.panel-block');
+  return host?.querySelector<HTMLElement>('.action-info') ?? null;
+}
 function showInfo(btn: HTMLElement | null) {
-  const block = btn?.closest('.panel-block');
-  const box = block?.querySelector<HTMLElement>('.action-info');
+  const box = infoBoxFor(btn);
   if (!btn || !box) return;
   const name = btn.querySelector('.arow span')?.textContent ?? '';
   const cost = btn.querySelector('.arow .mono')?.textContent ?? '';
@@ -301,8 +305,8 @@ function showInfo(btn: HTMLElement | null) {
   const notes = [...btn.querySelectorAll('.anote')].map((n) => `<p class="ai-note">${n.innerHTML}</p>`).join('');
   box.innerHTML = `<div class="ai-head"><span>${name}</span><span class="mono">${cost}</span></div><p class="ai-desc">${desc}</p>${notes}`;
 }
-function clearInfo(block: Element | null) {
-  const box = block?.querySelector<HTMLElement>('.action-info');
+function clearInfo(from: Element | null) {
+  const box = infoBoxFor(from);
   if (box) box.innerHTML = `<p class="ai-empty">${box.dataset.placeholder ?? ''}</p>`;
 }
 const onActionHover = (e: Event) => {
@@ -318,7 +322,7 @@ root.addEventListener('pointerout', (e) => {
   const to = (e as PointerEvent).relatedTarget as Element | null;
   if (from && !from.contains(to)) {
     infoAction = null;
-    clearInfo(from.closest('.panel-block'));
+    clearInfo(from);
   }
 });
 

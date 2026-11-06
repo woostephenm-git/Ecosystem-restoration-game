@@ -90,8 +90,10 @@ export function renderTile(game: Game, ui: UiState): string {
     <section class="left" aria-label="Tile cross-section">
       <div class="tile-nav">${tilePicker(game, ui)}${chips(game, ui)}</div>
       <div class="xsec-scroll">${crossSection(game, ui)}</div>
-      ${methodsPanel(game, ui)}
-      ${interventionsPanel(game, [ui.tileId])}
+      <div class="actions-wrap">
+        <div class="actions-main">${methodsPanel(game, ui)}${interventionsPanel(game, [ui.tileId], undefined, false)}</div>
+        ${infoBox('Point at a sampling method or an intervention to see what it does.')}
+      </div>
     </section>
     <aside class="right" aria-label="Analysis">
       ${selectedPanel(game, ui)}
@@ -325,20 +327,22 @@ function methodsPanel(game: Game, ui: UiState): string {
     .join('');
   return `<div class="panel-block compact">
     <div class="block-head"><span class="label">Sampling methods</span><span class="sub">Each method reveals specific variables. One budget pays for sampling and interventions.</span></div>
-    <div class="pb-body"><div class="grid4">${buttons}</div>${infoBox('Point at a method to see what it reveals.')}</div>
+    <div class="pb-body"><div class="grid4">${buttons}</div></div>
   </div>`;
 }
 
 /**
  * On a desktop the action buttons show only their name and cost; pointing at one (or tabbing
  * to it) shows its description here. main.ts fills it. Narrow screens keep descriptions inline.
+ * The box serves the nearest .actions-wrap, or else its own panel.
  */
 function infoBox(placeholder: string): string {
   return `<div class="action-info" aria-hidden="true" data-placeholder="${esc(placeholder)}"><p class="ai-empty">${esc(placeholder)}</p></div>`;
 }
 
 /** Interventions; tile-scoped ones act on every pond tile in `tiles`. */
-export function interventionsPanel(game: Game, tiles: string[], selectionLabel?: string): string {
+/** `ownInfo`: give the panel its own description box (the map); the investigation view shares one. */
+export function interventionsPanel(game: Game, tiles: string[], selectionLabel?: string, ownInfo = true): string {
   const pond = tiles.filter((t) => game.isWater(t));
   const buttons = game
     .interventions()
@@ -362,7 +366,7 @@ export function interventionsPanel(game: Game, tiles: string[], selectionLabel?:
     .join('');
   return `<div class="panel-block compact">
     <div class="block-head"><span class="label">Interventions</span><span class="sub">Act once you understand what limits the system. Order matters.</span></div>
-    <div class="pb-body"><div class="pb-main"><div class="grid4">${buttons}</div>${fundingButton(game)}</div>${infoBox('Point at an intervention to see what it does.')}</div>
+    <div class="pb-body"><div class="pb-main"><div class="grid4">${buttons}</div>${fundingButton(game)}</div>${ownInfo ? infoBox('Point at an intervention to see what it does.') : ''}</div>
   </div>`;
 }
 

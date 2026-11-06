@@ -2212,3 +2212,33 @@ button:focus-visible {
 .db-retry {
   margin-top: 10px;
 }
+
+/* Investigation view: sampling methods and interventions share one description box. */
+.actions-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.actions-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+@media (min-width: 900px) and (hover: hover) {
+  .actions-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 250px;
+    gap: 10px;
+    align-items: start;
+  }
+  .actions-wrap .panel-block.compact .pb-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* Level with the first row of buttons, and kept in view while scrolling past them. */
+  .actions-wrap > .action-info {
+    position: sticky;
+    top: 12px;
+    margin-top: 26px;
+  }
+}
