@@ -1355,6 +1355,12 @@ button:focus-visible {
   font-weight: 400;
   color: var(--warn-text);
 }
+.map-label {
+  transition: opacity 0.2s ease;
+}
+.map-label.faded {
+  opacity: 0.12;
+}
 
 /* Mission drawer: slides down from under the top bar */
 .layout {

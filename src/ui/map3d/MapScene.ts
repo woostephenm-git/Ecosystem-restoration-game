@@ -117,15 +117,15 @@ export class MapScene {
     this.element = document.createElement('div');
     this.element.className = 'stage3d';
     this.element.innerHTML = `
-      <canvas tabindex="0" aria-label="3D map of Clearwater Pond. Arrow keys move between tiles, Enter investigates, Shift adds tiles to the selection."></canvas>
+      <canvas tabindex="0" aria-label="3D map of Clearwater Pond. Drag to pan, Ctrl-drag to rotate. Arrow keys move between tiles, Enter investigates, Shift adds tiles to the selection."></canvas>
       <div class="hud" aria-live="polite"><div class="hud-tile">Hover or use arrow keys to inspect a tile</div><div class="hud-info">Shows observable state only</div></div>
-      <div class="map-hint">Drag to rotate · Scroll to zoom · Click a tile, click again to investigate · Shift-drag to select an area</div>
+      <div class="map-hint">Drag to pan · Ctrl-drag to rotate · Scroll to zoom · Click a tile, click again to investigate · Shift-drag to select an area</div>
       <div class="map-tools">
+        <label class="map-show"><span>Show</span><select data-map="overlay"></select></label>
         <div class="map-tools-row">
           <button type="button" class="btn small" data-map="reset">Reset view</button>
           <button type="button" class="btn small" data-map="quality" aria-pressed="false">Graphics: high</button>
         </div>
-        <label class="map-show"><span>Show</span><select data-map="overlay"></select></label>
       </div>
       <div class="compass" aria-hidden="true"><svg viewBox="-32 -32 64 64">
         <circle r="17" fill="none" stroke="#56666c" stroke-opacity="0.45" stroke-width="1"/>
@@ -146,7 +146,12 @@ export class MapScene {
     this.camera.zoom = START_ZOOM;
     this.controls = new OrbitControls(this.camera, this.canvas);
     this.controls.target.set(0, -0.4, 0);
-    this.controls.enablePan = false;
+    // Drag pans across the ground; Ctrl-drag (Cmd on a Mac) or right-drag rotates. With the
+    // left button set to pan, OrbitControls itself swaps to rotating while Ctrl is held.
+    this.controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+    this.controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    this.controls.screenSpacePanning = false;
+    this.controls.addEventListener('change', () => this.clampPan());
     this.controls.enableDamping = true;
     this.controls.minPolarAngle = 0.72;
     this.controls.maxPolarAngle = 1.12;
@@ -1216,6 +1221,19 @@ export class MapScene {
     if (select.value !== view.overlay) select.value = view.overlay;
   }
 
+  /** Keep the view centred over the map: panning stops a tile beyond the playable edge. */
+  private clampPan() {
+    const t = this.controls.target;
+    const lim = this.N / 2 + 1;
+    const dx = Math.min(lim, Math.max(-lim, t.x)) - t.x;
+    const dz = Math.min(lim, Math.max(-lim, t.z)) - t.z;
+    if (!dx && !dz) return;
+    t.x += dx;
+    t.z += dz;
+    this.camera.position.x += dx;
+    this.camera.position.z += dz;
+  }
+
   resetView() {
     this.camera.position.copy(START_CAMERA);
     this.camera.zoom = START_ZOOM;
@@ -1287,12 +1305,16 @@ export class MapScene {
     const canvas = this.canvas;
     let down: { x: number; y: number; tile: [number, number] | null; shift: boolean } | null = null;
     canvas.addEventListener('pointermove', (ev) => {
+      this.pointer = { x: ev.clientX, y: ev.clientY };
       const t = this.pickTile(ev);
       if (!t) this.setHover(null);
       else if (!this.hoverTile || this.hoverTile[0] !== t[0] || this.hoverTile[1] !== t[1]) this.setHover(t[0], t[1]);
       // Shift-drag paints a rectangle preview by moving the hover loop; the selection lands on release.
     });
-    canvas.addEventListener('pointerleave', () => this.setHover(null));
+    canvas.addEventListener('pointerleave', () => {
+      this.pointer = null;
+      this.setHover(null);
+    });
     canvas.addEventListener('pointerdown', (ev) => {
       down = { x: ev.clientX, y: ev.clientY, tile: this.pickTile(ev), shift: ev.shiftKey };
       // Shift-drag selects an area instead of rotating the camera.
@@ -1386,8 +1408,16 @@ export class MapScene {
       this._ca.set(m.x - this.HALF, this.WL + 0.3, m.z - this.HALF).project(this.camera);
       el.style.left = `${((this._ca.x + 1) / 2) * W}px`;
       el.style.top = `${((1 - this._ca.y) / 2) * Hh}px`;
+      // Fade a label while the pointer is over it, so the tiles underneath can be seen. Labels
+      // ignore the pointer, so clicks still reach the map.
+      const p = this.pointer;
+      const r = p ? el.getBoundingClientRect() : null;
+      el.classList.toggle('faded', !!r && p!.x > r.left - 8 && p!.x < r.right + 8 && p!.y > r.top - 8 && p!.y < r.bottom + 8);
     });
   }
+
+  /** Last pointer position over the map (client coordinates), or null when it is elsewhere. */
+  private pointer: { x: number; y: number } | null = null;
 
   private frame(now: number) {
     requestAnimationFrame((t) => this.frame(t));
